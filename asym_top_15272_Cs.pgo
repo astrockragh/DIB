@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+<Mixture NoLineList="True" Version="PGOPHER 11.0.138 10 Dec 2020 18:41  64 bit (fpc 3.3.1 x86_64-Darwin)" nDF="10000" AllowComplex="True">
+  <Parameter Name="RightScale" Float="true"/>
+  <Species Name="Species" Jmax="250">
+    <AsymmetricMolecule Name="AsymmetricTop" PointGroup="Cs" Jmax="250">
+      <AsymmetricManifold Name="Ground" Initial="True" Jmax="250">
+        <AsymmetricTop Name="v=0" Symmetry="A'">
+          <Parameter Name="A" Value="0.0125"/>
+          <Parameter Name="B" Value="0.0023"/>
+          <Parameter Name="C" Value="0.0023"/>
+        </AsymmetricTop>
+      </AsymmetricManifold>
+      <AsymmetricManifold Name="Excited" Jmax="250">
+        <AsymmetricTop Name="v=1" Symmetry="A'">
+          <Parameter Name="Origin" Value="6547.8052793819"/>
+          <Parameter Name="A" Value="0.0125" Float="true" StdDev="0.00216768783531737"/>
+          <Parameter Name="B" Value="0.0023" StdDev="0.00216492931563296"/>
+          <Parameter Name="C" Value="0.0023" StdDev="0.00691548509272373"/>
+          <Parameter Name="BDelta" Float="true"/>
+        </AsymmetricTop>
+      </AsymmetricManifold>
+      <TransitionMoments Bra="Excited" Ket="Ground">
+        <CartesianTransitionMoment Axis="b" Bra="v=1" Ket="v=0">
+          <Parameter Name="Strength" Float="true"/>
+        </CartesianTransitionMoment>
+      </TransitionMoments>
+    </AsymmetricMolecule>
+  </Species>
+  <Correlations Name="Correlations">
+    <Correlation Row="Species.AsymmetricTop.Ground.v=0.A" Col="Simulation.Temperature" Value="-0.965934458494349"/>
+    <Correlation Row="Species.AsymmetricTop.Ground.v=0.B" Col="Simulation.Temperature" Value="-0.963986603224685"/>
+    <Correlation Row="Species.AsymmetricTop.Ground.v=0.B" Col="Species.AsymmetricTop.Ground.v=0.A" Value="0.994038987915698"/>
+    <Correlation Row="Species.AsymmetricTop.Ground.v=0.C" Col="Simulation.Temperature" Value="-0.968166565548645"/>
+    <Correlation Row="Species.AsymmetricTop.Ground.v=0.C" Col="Species.AsymmetricTop.Ground.v=0.A" Value="0.940427540642487"/>
+    <Correlation Row="Species.AsymmetricTop.Ground.v=0.C" Col="Species.AsymmetricTop.Ground.v=0.B" Value="0.932650971469635"/>
+    <Correlation Row="Species.AsymmetricTop.Excited.v=1.A" Col="Simulation.Temperature" Value="-0.968214960689746"/>
+    <Correlation Row="Species.AsymmetricTop.Excited.v=1.A" Col="Species.AsymmetricTop.Ground.v=0.A" Value="0.999857596544622"/>
+    <Correlation Row="Species.AsymmetricTop.Excited.v=1.A" Col="Species.AsymmetricTop.Ground.v=0.B" Value="0.99437460471848"/>
+    <Correlation Row="Species.AsymmetricTop.Excited.v=1.A" Col="Species.AsymmetricTop.Ground.v=0.C" Value="0.939425545023966"/>
+    <Correlation Row="Species.AsymmetricTop.Excited.v=1.B" Col="Simulation.Temperature" Value="-0.960854704333303"/>
+    <Correlation Row="Species.AsymmetricTop.Excited.v=1.B" Col="Species.AsymmetricTop.Ground.v=0.A" Value="0.993372974704244"/>
+    <Correlation Row="Species.AsymmetricTop.Excited.v=1.B" Col="Species.AsymmetricTop.Ground.v=0.B" Value="0.99988379876468"/>
+    <Correlation Row="Species.AsymmetricTop.Excited.v=1.B" Col="Species.AsymmetricTop.Ground.v=0.C" Value="0.93127743075956"/>
+    <Correlation Row="Species.AsymmetricTop.Excited.v=1.B" Col="Species.AsymmetricTop.Excited.v=1.A" Value="0.993538944865538"/>
+    <Correlation Row="Species.AsymmetricTop.Excited.v=1.C" Col="Simulation.Temperature" Value="-0.96771765486848"/>
+    <Correlation Row="Species.AsymmetricTop.Excited.v=1.C" Col="Species.AsymmetricTop.Ground.v=0.A" Value="0.940506388656603"/>
+    <Correlation Row="Species.AsymmetricTop.Excited.v=1.C" Col="Species.AsymmetricTop.Ground.v=0.B" Value="0.932770992329234"/>
+    <Correlation Row="Species.AsymmetricTop.Excited.v=1.C" Col="Species.AsymmetricTop.Ground.v=0.C" Value="0.999980846640825"/>
+    <Correlation Row="Species.AsymmetricTop.Excited.v=1.C" Col="Species.AsymmetricTop.Excited.v=1.A" Value="0.939441256399517"/>
+    <Correlation Row="Species.AsymmetricTop.Excited.v=1.C" Col="Species.AsymmetricTop.Excited.v=1.B" Value="0.931431854205903"/>
+  </Correlations>
+  <Parameter Name="Gaussian" Value="0.01"/>
+  <Parameter Name="Lorentzian" Value="0.01"/>
+  <Parameter Name="OThreshold" Value="1E-20"/>
+  <Parameter Name="SMargin" Value="-0.960498"/>
+  <Parameter Name="Temperature" Value="15"/>
+  <Parameter Name="Fmin" Value="6544.6395514428"/>
+  <Parameter Name="Fmax" Value="6550.5"/>
+  <FormSettings Name="ConstantsWindow" ActiveObject="Simulation: Simulation"/>
+</Mixture>

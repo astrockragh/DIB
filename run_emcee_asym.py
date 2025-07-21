@@ -143,8 +143,7 @@ def model_log_likelihood(params, data_wavelength, data_flux, data_flux_dT, noise
 
     lp = log_prior(params)
     if not np.isfinite(lp):
-        return -np.inf
-        
+        return -np.inf        
     try:
         
         T, AB_base, C_base, frac_AB, frac_C = params

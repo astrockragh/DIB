@@ -48,7 +48,17 @@ def parse_args():
     parser.add_argument("-cov", "--cov",
                         type=lambda x: x.lower() in ['true', '1', 'yes'],
                         default=False,
-                        help="Fit temperature derivative spectrum (default: True)")
+                        help="Fit with full covariance (default: False)")
+    
+    parser.add_argument("-nsteps", "--nsteps",
+                        type=int,
+                        default=5000,
+                        help="How many steps to take (default: 5000)")
+    
+    parser.add_argument("-title", "--title",
+                        type=str,
+                        default='',
+                        help="Anything to add to the title? (default: Nothing)")
 
     return parser.parse_args()
 
@@ -63,7 +73,7 @@ def val_to_str(v):
     return str(v)
 
 TEMP_SUFFIX = f"Cs_BC{val_to_str(args.B_not_equal_C)}_F{val_to_str(args.fudge)}_D{val_to_str(args.use_direct)}_" + \
-              f"Flat{val_to_str(args.flat_prior)}_Spec{val_to_str(args.fit_spec)}_dT{val_to_str(args.fit_dT)}_cov{val_to_str(args.cov)}"
+              f"Flat{val_to_str(args.flat_prior)}_Spec{val_to_str(args.fit_spec)}_dT{val_to_str(args.fit_dT)}_cov{val_to_str(args.cov)}"+f'_{args.title}'
 
 print(TEMP_SUFFIX)
 
@@ -186,16 +196,16 @@ def log_prior(params):
         frac_B = frac_A
 
     if args.flat_prior:
-        if not (3 <= T <= 100): return -np.inf
-        if not (0.0001 <= C <= 0.02): return -np.inf
-        if not (0.0001 <= B <= 0.02): return -np.inf
-        if not (0.0001 <= A <= 0.2): return -np.inf
+        if not (1 <= T <= 100): return -np.inf
+        if not (0.0001 <= C <= 0.04): return -np.inf
+        if not (0.0001 <= B <= 0.04): return -np.inf
+        if not (0.0001 <= A <= 0.3): return -np.inf
         if not (0.9 <= frac_A <= 1.0): return -np.inf
         if not (0.9 <= frac_B <= 1.0): return -np.inf
         if not (0.9 <= frac_C <= 1.0): return -np.inf
         return 0.0
     else:
-        if T <= 2 or T > 100: return -np.inf
+        if T <= 1 or T > 100: return -np.inf
         ## params for log-normal Temp prior
         mu = np.log(30)
         sigma = 1
@@ -203,10 +213,16 @@ def log_prior(params):
 
         if C < 0.0005 or C > 0.04: return -np.inf
         if B < 0.0005 or B > 0.04: return -np.inf
-        ab_logprior = 0.0
+        if C>=B: return np.inf
+        else:
+            if args.B_not_equal_C:
+                C0 = (1/A+1/B)**(-1)
+                CB_logprior = - ( (C-C0)/( np.sqrt(2) * 0.3 * C0 ) )**2
+            else:
+                CB_logprior = 0.0
 
-        if A < 0.001 or A > 0.2: return -np.inf
-        c_logprior = 0.0
+        if A < 0.001 or A > 0.3: return -np.inf
+        A_logprior = 0.0
 
         if frac_A > 1: return -np.inf
         frac_a_logprior = -10 * (frac_A - 1) ** 2
@@ -217,7 +233,7 @@ def log_prior(params):
         if frac_C > 1: return -np.inf
         frac_c_logprior = -10 * (frac_C - 1) ** 2
 
-        return temp_logprior + ab_logprior + c_logprior + frac_a_logprior + frac_b_logprior + frac_c_logprior
+        return temp_logprior + CB_logprior + A_logprior + frac_a_logprior + frac_b_logprior + frac_c_logprior
 
 def compute_loglikelihood(
     model_flux_b, model_flux_c,
@@ -227,7 +243,7 @@ def compute_loglikelihood(
 ):
     chi2 = 0.0
     c = 10  # edge crop
-    gf = 0.1  # Gaussian filter width
+    gf = 0.01  # Gaussian filter width
     b_frac = c_frac = offset = 0
     b_frac_dT = c_frac_dT = offset_dT = 0
     base_frac_dT = 0
@@ -389,7 +405,7 @@ else:
     p0_center = [20, 0.02, 0.003, 0.99, 0.99]  # T, AB, C, frac_AB, frac_C
     step_scales = [15, 0.005, 0.0015, 0.001, 0.001]
 
-nsteps = 5000
+nsteps = args.nsteps
 ncpu_to_use = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else max(1, os.cpu_count())
 nwalkers = ncpu_to_use
 print(f"Using {ncpu_to_use} CPUs")
@@ -401,7 +417,7 @@ data_wavelength = DIB_15272['wav'][:]
 data_flux = DIB_15272['mean'][:][:,0]
 data_flux_dT = DIB_15272['mean'][:][:,1]
 
-noise_std = 2*fudge*np.sqrt(DIB_15272['var'][:][:,0])
+noise_std = fudge*np.sqrt(DIB_15272['var'][:][:,0])
 noise_std_dT = fudge*np.sqrt(DIB_15272['var'][:][:,1])
 
 if args.use_direct:
@@ -452,6 +468,8 @@ with get_context("fork").Pool(processes=ncpu_to_use) as pool:
         p0_center + np.array(step_scales) / np.sqrt(nwalkers) * np.random.normal(size=ndim)
         for _ in range(nwalkers)
     ])
+
+    p0[:,3] = (1/p0[:,2]+1/p0[:,1])**(-1)
 
     startm = time.time()
     sampler.run_mcmc(p0, nsteps, progress=True)

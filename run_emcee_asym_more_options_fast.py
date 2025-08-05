@@ -9,9 +9,6 @@ from scipy.signal import fftconvolve
 from scipy.signal import convolve
 from scipy.interpolate import interp1d
 
-# Constants
-PGO_TEMPLATE = "asym_top_15272_Cs.pgo"
-
 def parse_args():
     parser = argparse.ArgumentParser(description="Run emcee for asymmetric top spectra fitting")
 
@@ -60,6 +57,20 @@ def parse_args():
                         default='',
                         help="Anything to add to the title? (default: Nothing)")
 
+    parser.add_argument("-symmetry_group", "--symmetry_group",
+                        type=str,
+                        default='Cs',
+                        help="Which symmetry group to use (default: Cs (only other option is currently C2v))")
+    
+    parser.add_argument("-nonlinear_fit", "--nonlinear_fit",
+                        type=lambda x: x.lower() in ['true', '1', 'yes'],
+                        default=False,
+                        help="Fit the constants in a fully non-linear way")
+    
+    parser.add_argument("-use_scalar_prior", "--use_scalar_prior",
+                        type=lambda x: x.lower() in ['true', '1', 'yes'],
+                        default=False,
+                        help="Use a prior on the b/c ratio instead of a direct ")
     return parser.parse_args()
 
 args = parse_args()
@@ -72,20 +83,25 @@ def val_to_str(v):
         return str(v).replace('.', 'p')
     return str(v)
 
-TEMP_SUFFIX = f"Cs_BC{val_to_str(args.B_not_equal_C)}_F{val_to_str(args.fudge)}_D{val_to_str(args.use_direct)}_" + \
-              f"Flat{val_to_str(args.flat_prior)}_Spec{val_to_str(args.fit_spec)}_dT{val_to_str(args.fit_dT)}_cov{val_to_str(args.cov)}"+f'_{args.title}'
+TEMP_SUFFIX = f"Symmetry{val_to_str(args.symmetry_group)}_BC{val_to_str(args.B_not_equal_C)}_F{val_to_str(args.fudge)}_D{val_to_str(args.use_direct)}_" + \
+              f"Flat{val_to_str(args.flat_prior)}_Spec{val_to_str(args.fit_spec)}_dT{val_to_str(args.fit_dT)}_cov{val_to_str(args.cov)}_nonlin{val_to_str(args.nonlinear_fit)}"+ \
+              f'_{args.title}'
 
-print(TEMP_SUFFIX)
+# Constants
+if args.symmetry_group == 'Cs':
+    PGO_TEMPLATE = osp.expanduser("~/DIB/asym_top_15272_Cs.pgo")
+if args.symmetry_group == 'C2v':
+    PGO_TEMPLATE = osp.expanduser("~/DIB/asym_top_15272_C2v.pgo")
 
 TEMP_DIR = osp.expanduser(f"~/../../scratch/gpfs/cj1223/DIB/pgo_temppy_{TEMP_SUFFIX}")
 os.makedirs(TEMP_DIR, exist_ok=True)
 shutil.rmtree(TEMP_DIR, ignore_errors=False, onerror=None)
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-def filename_base(T, A_base, B_base, C_base, frac_A, frac_B, frac_C, axis = 'b'):
-    return f"T{T:.3f}_A{A_base:.7f}_B{B_base:.7f}_C{C_base:.7f}_FA{frac_A:.5f}_FB{frac_B:.5f}_FC{frac_C:.5f}_ax{axis}"
+def filename_base(T, A_base, B_base, C_base, frac_A, frac_B, frac_C, lorentz_width=0.01, axis = 'b'):
+    return f"T{T:.3f}_A{A_base:.7f}_B{B_base:.7f}_C{C_base:.7f}_FA{frac_A:.5f}_FB{frac_B:.5f}_FC{frac_C:.5f}_ax{axis}_lifetime{lorentz_width:.3f}"
 
-def generate_pgopher_input(T, A_base, B_base, C_base, frac_A, frac_B, frac_C, axis="b"):
+def generate_pgopher_input_Cs(T, A_base, B_base, C_base, frac_A, frac_B, frac_C, lorentz_width=0.01, axis="b"):
     A_g, B_g, C_g = A_base, B_base, C_base
     A_e, B_e, C_e = A_base * frac_A, B_base * frac_B, C_base * frac_C
 
@@ -97,7 +113,7 @@ def generate_pgopher_input(T, A_base, B_base, C_base, frac_A, frac_B, frac_C, ax
     awk -v temp="{T}" \\
         -v A_ground="{A_g}" -v B_ground="{B_g}" -v C_ground="{C_g}" \\
         -v A_excited="{A_e}" -v B_excited="{B_e}" -v C_excited="{C_e}" \\
-        -v axis="{axis}" '
+        -v axis="{axis}" -v lorentz_width="{lorentz_width}" '
     BEGIN {{ inside_ground = 0; inside_excited = 0; }}
     /<Parameter Name="Temperature" Value="/ {{
         sub(/Value="[0-9.eE+-]+"/, "Value=\\"" temp "\\"")
@@ -114,13 +130,83 @@ def generate_pgopher_input(T, A_base, B_base, C_base, frac_A, frac_B, frac_C, ax
     /<CartesianTransitionMoment Axis="/ {{
         sub(/Axis="[^"]+"/, "Axis=\\"" axis "\\"")
     }}
+    /<Parameter Name="Lorentzian" Value="/ {{
+        sub(/Value="[0-9.eE+-]+"/, "Value=\\"" lorentz_width "\\"")
+    }}
     {{ print }}
     ' {PGO_TEMPLATE} > {pgo_file}
     '''
 
     subprocess.run(awk_script, shell=True, check=True, executable="/bin/bash")
-    subprocess.run(["./pgo", "--plot", pgo_file, spec_txt], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run([osp.expanduser("~/DIB/./pgo"), "--plot", pgo_file, spec_txt], check=True, stdout=subprocess.DEVNULL)
     return spec_txt, base
+
+def generate_pgopher_input_C2v(T, A_base, B_base, C_base, frac_A, frac_B, frac_C,
+                              lorentz_width=0.01, axis="a"):
+    A_g, B_g, C_g = A_base, B_base, C_base
+    A_e, B_e, C_e = A_base * frac_A, B_base * frac_B, C_base * frac_C
+
+    base = filename_base(T, A_base, B_base, C_base, frac_A, frac_B, frac_C, axis=axis)
+    pgo_file = os.path.join(TEMP_DIR, f"temp_{base}.pgo")
+    spec_txt = os.path.join(TEMP_DIR, f"spec_{base}.txt")
+
+    awk_script = f'''
+    awk -v temp="{T}" \\
+        -v A_ground="{A_g}" -v B_ground="{B_g}" -v C_ground="{C_g}" \\
+        -v A_excited="{A_e}" -v B_excited="{B_e}" -v C_excited="{C_e}" \\
+        -v axis="{axis}" -v lorentz_width="{lorentz_width}" '
+    BEGIN {{
+        in_ground = 0; in_excited = 0;
+    }}
+    /<AsymmetricTop Name="v=0"/ {{
+        in_ground = 1;
+    }}
+    /<AsymmetricTop Name="v=1"/ {{
+        in_excited = 1;
+    }}
+    /<\/AsymmetricTop>/ {{
+        in_ground = 0;
+        in_excited = 0;
+    }}
+    in_ground && /<Parameter Name="A" Value=/ {{
+        sub(/Value="[0-9.eE+-]+"/, "Value=\\"" A_ground "\\"")
+    }}
+    in_ground && /<Parameter Name="B" Value=/ {{
+        sub(/Value="[0-9.eE+-]+"/, "Value=\\"" B_ground "\\"")
+    }}
+    in_ground && /<Parameter Name="C" Value=/ {{
+        sub(/Value="[0-9.eE+-]+"/, "Value=\\"" C_ground "\\"")
+    }}
+    in_excited && /<Parameter Name="A" Value=/ {{
+        sub(/Value="[0-9.eE+-]+"/, "Value=\\"" A_excited "\\"")
+    }}
+    in_excited && /<Parameter Name="B" Value=/ {{
+        sub(/Value="[0-9.eE+-]+"/, "Value=\\"" B_excited "\\"")
+    }}
+    in_excited && /<Parameter Name="C" Value=/ {{
+        sub(/Value="[0-9.eE+-]+"/, "Value=\\"" C_excited "\\"")
+    }}
+    /<CartesianTransitionMoment Bra="v=1" Ket="v=0"/ {{
+        sub(/Axis="[^"]+"/, "Axis=\\"" axis "\\"")
+    }}
+    /<Parameter Name="Temperature" Value=/ {{
+        sub(/Value="[0-9.eE+-]+"/, "Value=\\"" temp "\\"")
+    }}
+    /<Parameter Name="Lorentzian" Value=/ {{
+        sub(/Value="[0-9.eE+-]+"/, "Value=\\"" lorentz_width "\\"")
+    }}
+    {{ print }}
+    ' {PGO_TEMPLATE} > {pgo_file}
+    '''
+
+    subprocess.run(awk_script, shell=True, check=True, executable="/bin/bash")
+    subprocess.run([osp.expanduser("~/DIB/./pgo"), "--plot", pgo_file, spec_txt], check=True, stdout=subprocess.DEVNULL)
+    return spec_txt, base
+
+if args.symmetry_group == 'Cs':
+    generate_pgopher_input = generate_pgopher_input_Cs
+if args.symmetry_group == 'C2v':
+    generate_pgopher_input = generate_pgopher_input_C2v
 
 def convolve_pgopher_spectrum(spectrum_file, center_wav, lsf_key='LCO+APO', dlam=0.01, window=8):
     """
@@ -174,38 +260,43 @@ def convolve_pgopher_spectrum(spectrum_file, center_wav, lsf_key='LCO+APO', dlam
     # === Interpolate back to original PGOPHER (or LSF) grid ===
     out_interp = interp1d(wav_reg, convolved_flux, bounds_error=False, fill_value=0.0)
 
-    lsf_file = f'LSFs/lsf_15272.h5'
-    # Load LSF and its wavelength grid
-    with h5py.File(lsf_file, 'r') as f:
-        wav_load = f['wav'][:]
-      # Or replace with another grid if desired
+    if args.use_direct:
+        lsf_file = osp.expanduser('~/DIB/LSFs/lsf_15272.h5')
+        # Load LSF and its wavelength grid
+        with h5py.File(lsf_file, 'r') as f:
+            wav_load = f['wav'][:]
+        
+    else:
+        measurements = pd.read_csv(osp.expanduser('~/DIB/pca_version.txt'), sep='\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
+        wav_load = measurements['wavelength']
     flux_on_lsf_grid = out_interp(wav_load)
 
     return wav_load, flux_on_lsf_grid
 
 def log_prior(params):
     if args.B_not_equal_C:
-        if len(params) != 7:
+        if len(params) != 8:
             return -np.inf
-        T, A, B, C, frac_A, frac_B, frac_C = params
+        T, A, B, C, frac_A, frac_B, frac_C, lorentz_width  = params
     else:
-        if len(params) != 5:
+        if len(params) != 6:
             return -np.inf
-        T, A, C, frac_A, frac_C = params
+        T, A, C, frac_A, frac_C, lorentz_width = params
         B = A
         frac_B = frac_A
 
     if args.flat_prior:
-        if not (1 <= T <= 100): return -np.inf
+        if not (3 <= T <= 100): return -np.inf
         if not (0.0001 <= C <= 0.04): return -np.inf
         if not (0.0001 <= B <= 0.04): return -np.inf
         if not (0.0001 <= A <= 0.3): return -np.inf
         if not (0.9 <= frac_A <= 1.0): return -np.inf
         if not (0.9 <= frac_B <= 1.0): return -np.inf
         if not (0.9 <= frac_C <= 1.0): return -np.inf
+        if not (0.0 <= lorentz_width <= 1.0): return -np.inf
         return 0.0
     else:
-        if T <= 1 or T > 100: return -np.inf
+        if T <= 3 or T > 100: return -np.inf
         ## params for log-normal Temp prior
         mu = np.log(30)
         sigma = 1
@@ -213,11 +304,12 @@ def log_prior(params):
 
         if C < 0.0005 or C > 0.04: return -np.inf
         if B < 0.0005 or B > 0.04: return -np.inf
-        if C>=B: return np.inf
+        if not (0.0 <= lorentz_width <= 1.0): return -np.inf
+        # if C>=B: return np.inf # if enforcing hierarchy
         else:
             if args.B_not_equal_C:
                 C0 = (1/A+1/B)**(-1)
-                CB_logprior = - ( (C-C0)/( np.sqrt(2) * 0.3 * C0 ) )**2
+                CB_logprior = - ( (C-C0)/( np.sqrt(2) * 1 * C0 ) )**2
             else:
                 CB_logprior = 0.0
 
@@ -235,109 +327,289 @@ def log_prior(params):
 
         return temp_logprior + CB_logprior + A_logprior + frac_a_logprior + frac_b_logprior + frac_c_logprior
 
-def compute_loglikelihood(
+def compute_loglikelihood_Cs(
     model_flux_b, model_flux_c,
     model_flux_dT_b, model_flux_dT_c,
     data_flux, data_flux_dT,
     noise_std, noise_std_dT
 ):
     chi2 = 0.0
-    c = 10  # edge crop
+
+    if args.use_direct:
+        c = 10  # edge crop
+    else:
+        c = 30
+
     gf = 0.01  # Gaussian filter width
     b_frac = c_frac = offset = 0
     b_frac_dT = c_frac_dT = offset_dT = 0
     base_frac_dT = 0
-
-    if args.fit_spec:
-        # Apply Gaussian filter and crop edges
-        spec_b = gaussian_filter(model_flux_b[c:-c], gf)
-        spec_c = gaussian_filter(model_flux_c[c:-c], gf)
-        measurement = data_flux[c:-c]
-        noise = noise_std[c:-c]
-
-        # Fit linear combination: b_frac * spec_b + c_frac * spec_c + offset
-        M = np.vstack([spec_b, spec_c, np.ones_like(spec_b)]).T
-        coeffs, _, _, _ = np.linalg.lstsq(M, measurement, rcond=None)
-        b_frac, c_frac, offset = coeffs
-
-        # Evaluate fit
-        fit = b_frac * spec_b + c_frac * spec_c + offset
-        chi = (measurement - fit) / noise
-        chi2 += np.sum(chi ** 2)
-
-    if args.fit_dT:
-        # Apply Gaussian filter and crop edges
-        spec_b = gaussian_filter(model_flux_b[c:-c], gf)
-        spec_c = gaussian_filter(model_flux_c[c:-c], gf)
-        spec_dT_b = gaussian_filter(model_flux_dT_b[c:-c], gf) - spec_b
-        spec_dT_c = gaussian_filter(model_flux_dT_c[c:-c], gf) - spec_c
-        measurement_dT = data_flux_dT[c:-c]
-        noise_dT = noise_std_dT[c:-c]
-
-        # Estimate direct ratio to construct the base spectrum
+    if args.use_scalar_prior:
         if args.fit_spec:
-            ratio_direct = b_frac / (c_frac + 1e-10)
-        else:
-            ratio_direct = 1.0  # fallback
+            # Apply Gaussian filter and crop edges
+            spec_b = gaussian_filter(model_flux_b[c:-c], gf)
+            spec_c = gaussian_filter(model_flux_c[c:-c], gf)
+            measurement = data_flux[c:-c]
+            noise = noise_std[c:-c]
 
-        # Form matrix: linear combo of original + delta spectra
-        base_spec = spec_b + ratio_direct * spec_c
-        M_dT = np.vstack([base_spec, spec_dT_b, spec_dT_c, np.ones_like(base_spec)]).T
-        coeffs_dT, _, _, _ = np.linalg.lstsq(M_dT, measurement_dT, rcond=None)
-        base_frac_dT, b_frac_dT, c_frac_dT, offset_dT = coeffs_dT
+            # Fit linear combination: b_frac * spec_b + c_frac * spec_c + offset
+            M = np.vstack([spec_b, spec_c, np.ones_like(spec_b)]).T
+            coeffs, _, _, _ = np.linalg.lstsq(M, measurement, rcond=None)
+            b_frac, c_frac, offset = coeffs
 
-        # Evaluate fit
-        fit_dT = (
-            base_frac_dT * base_spec +
-            b_frac_dT * spec_dT_b +
-            c_frac_dT * spec_dT_c +
-            offset_dT
-        )
-        chi_dT = (measurement_dT - fit_dT) / noise_dT
-        chi2 += np.sum(chi_dT ** 2)
+            # Evaluate fit
+            fit = b_frac * spec_b + c_frac * spec_c + offset
+            chi = (measurement - fit) / noise
+            chi2 += np.sum(chi ** 2)
 
-        # Optional: ratio constraint on the shape of the delta contributions
-        ratio_dT = b_frac_dT / (c_frac_dT + 1e-10)
-        ratio_tol = 0.5 * ratio_direct
-        ratio_deviation = ((ratio_dT - ratio_direct) / ratio_tol) ** 2
-        chi2 += ratio_deviation
+        if args.fit_dT:
+            # Apply Gaussian filter and crop edges
+            spec_b = gaussian_filter(model_flux_b[c:-c], gf)
+            spec_c = gaussian_filter(model_flux_c[c:-c], gf)
+            spec_dT_b = gaussian_filter(model_flux_dT_b[c:-c], gf) - spec_b
+            spec_dT_c = gaussian_filter(model_flux_dT_c[c:-c], gf) - spec_c
+            measurement_dT = data_flux_dT[c:-c]
+            noise_dT = noise_std_dT[c:-c]
+
+            # Estimate direct ratio to construct the base spectrum
+            if args.fit_spec:
+                ratio_direct = b_frac / (c_frac + 1e-10)
+            else:
+                ratio_direct = 1.0  # fallback
+
+            # Form matrix: linear combo of original + delta spectra
+            base_spec = spec_b + ratio_direct * spec_c
+            M_dT = np.vstack([base_spec, spec_dT_b, spec_dT_c, np.ones_like(base_spec)]).T
+            coeffs_dT, _, _, _ = np.linalg.lstsq(M_dT, measurement_dT, rcond=None)
+            base_frac_dT, b_frac_dT, c_frac_dT, offset_dT = coeffs_dT
+
+            # Evaluate fit
+            fit_dT = (
+                base_frac_dT * base_spec +
+                b_frac_dT * spec_dT_b +
+                c_frac_dT * spec_dT_c +
+                offset_dT
+            )
+            chi_dT = (measurement_dT - fit_dT) / noise_dT
+            chi2 += np.sum(chi_dT ** 2)
+
+            # Optional: ratio constraint on the shape of the dT contributions
+            ratio_dT = b_frac_dT / (c_frac_dT + 1e-10)
+            ratio_tol = 0.01 * ratio_direct
+            ratio_deviation = ((ratio_dT - ratio_direct) / ratio_tol) ** 2
+            chi2 += ratio_deviation
+        
+        scalars = np.array([
+        float(b_frac), float(c_frac), float(offset),
+        float(base_frac_dT), float(b_frac_dT), float(c_frac_dT), float(offset_dT)])
+    else:
+        ## New as of August 4th, doing joint fit for the ratio between b- and c-type transitions
+        ## I think that this has to be non-linear, so switching to scipy.optimize
+        if args.fit_spec and args.fit_dT and args.nonlinear_fit: 
+            from scipy.optimize import least_squares
+            
+            # Apply Gaussian filters and crop
+            spec_b = gaussian_filter(model_flux_b[c:-c], gf)
+            spec_c = gaussian_filter(model_flux_c[c:-c], gf)
+            measurement = data_flux[c:-c]
+            noise = noise_std[c:-c]
+
+            spec_dT_b = gaussian_filter(model_flux_dT_b[c:-c]-model_flux_b[c:-c], gf)
+            spec_dT_c = gaussian_filter(model_flux_dT_c[c:-c]-model_flux_c[c:-c], gf)
+            measurement_dT = data_flux_dT[c:-c]
+            noise_dT = noise_std_dT[c:-c]
+
+            # Define residuals function
+            def residuals(params):
+                # Unpack parameters
+                gamma, ratio_bc, offset_spec, alpha_dT, beta_dT, offset_dT = params
+
+                # First fit residuals
+                fit = gamma * ( spec_b + ratio_bc * spec_c ) + offset_spec
+                chi = (measurement - fit) / noise
+
+                # dT fit residuals
+                base_spec = spec_b + ratio_bc * spec_c
+                fit_dT = (
+                    alpha_dT * base_spec + #primary spectrum
+                    beta_dT * ( spec_dT_b  +  ratio_bc * spec_dT_c ) +  offset_dT #dT spectrum
+                )
+                chi_dT = (measurement_dT - fit_dT) / noise_dT
+
+                return np.concatenate([chi, chi_dT])
+
+            # Initial guess
+            x0 = [1.0, 1.0, 0.0, 1.0, 1.0, 0.0]
+
+            # Perform nonlinear least squares fit
+            result = least_squares(residuals, x0)
+
+            # Unpack results
+            gamma, ratio_bc, offset_spec, alpha_dT, beta_dT, offset_dT = result.x
+            # b_frac, c_frac, offset, base_frac_dT, b_frac_dT, c_frac_dT, offset_dT = gamma, gamma*ratio_bc, offset_spec, alpha_dT, beta_dT, beta_dT*ratio_bc, offset_dT 
+
+            # Evaluate fits if needed
+            fit = gamma * spec_b + gamma*ratio_bc * spec_c + offset_spec
+            fit_dT = (
+                alpha_dT * (spec_b + ratio_bc * spec_c) +
+                beta_dT * ( spec_dT_b  +  ratio_bc * spec_dT_c ) +  offset_dT
+            )
+            chi2 += np.sum( ( (measurement_dT - fit_dT) / noise_dT )**2 )
+            chi2 += np.sum( ( (measurement - fit) / noise )**2 )
+            
+            scalars = np.array([
+            float(gamma), float(ratio_bc), float(offset_spec),
+            float(alpha_dT), float(beta_dT), float(offset_dT)])
+
+        ## this is now a function that only does ratio_bc non-linearly
+        elif args.fit_spec and args.fit_dT and not args.nonlinear_fit:
+            from scipy.optimize import minimize
+
+            # Apply Gaussian filters and crop
+            spec_b = gaussian_filter(model_flux_b[c:-c], gf)
+            spec_c = gaussian_filter(model_flux_c[c:-c], gf)
+            measurement = data_flux[c:-c]
+            noise = noise_std[c:-c]
+
+            spec_dT_b = gaussian_filter(model_flux_dT_b[c:-c]-model_flux_b[c:-c], gf)
+            spec_dT_c = gaussian_filter(model_flux_dT_c[c:-c]-model_flux_c[c:-c], gf)
+            measurement_dT = data_flux_dT[c:-c]
+            noise_dT = noise_std_dT[c:-c]
+
+            # Residual function for minimize (only depends on ratio_bc)
+            def objective(ratio_bc):
+                # Build design matrix for spec fit: gamma * (spec_b + ratio_bc * spec_c) + offset_spec
+
+                base_spec = spec_b + ratio_bc * spec_c
+                delta_spec = spec_dT_b + ratio_bc * spec_dT_c
+                X_spec = np.vstack([
+                    base_spec,
+                    np.ones_like(base_spec)
+                ]).T
+                y_spec = measurement
+
+                # Weighted linear least squares for spec
+                W_spec = 1.0 / noise
+                Xw_spec = X_spec * W_spec[:, None]
+                yw_spec = y_spec * W_spec
+                coeffs_spec, _, _, _ = np.linalg.lstsq(Xw_spec, yw_spec, rcond=None)
+                gamma, offset_spec = coeffs_spec
+
+                # Build design matrix for dT fit:            
+                X_dT = np.vstack([
+                    base_spec,
+                    delta_spec,
+                    np.ones_like(base_spec)
+                ]).T
+                y_dT = measurement_dT
+
+                # Weighted linear least squares for dT
+                W_dT = 1.0 / noise_dT
+                Xw_dT = X_dT * W_dT[:, None]
+                yw_dT = y_dT * W_dT
+                coeffs_dT, _, _, _ = np.linalg.lstsq(Xw_dT, yw_dT, rcond=None)
+                alpha_dT, beta_dT, offset_dT = coeffs_dT
+
+                # Compute total chi-squared
+                fit_spec = gamma * base_spec + offset_spec
+                fit_dT = alpha_dT * base_spec + beta_dT * delta_spec + offset_dT
+                chi2_spec = np.sum(((measurement - fit_spec) / noise) ** 2)
+                chi2_dT = np.sum(((measurement_dT - fit_dT) / noise_dT) ** 2)
+
+                return chi2_spec + chi2_dT
+
+            # Run outer optimization over ratio_bc
+            opt_result = minimize(objective, x0=[1.0], method='L-BFGS-B')
+
+            # Optimal ratio_bc
+            ratio_bc = opt_result.x[0]
+
+            # Final linear fits with optimal ratio_bc
+            # Main spectrum
+            X_spec = np.vstack([
+                spec_b + ratio_bc * spec_c,
+                np.ones_like(spec_b)
+            ]).T
+            y_spec = measurement
+            W_spec = 1.0 / noise
+            # W_dT = np.ones_like(noise)
+            Xw_spec = X_spec * W_spec[:, None]
+            yw_spec = y_spec * W_spec
+            gamma, offset_spec = np.linalg.lstsq(Xw_spec, yw_spec, rcond=None)[0]
+
+            # dT spectrum
+            base_spec = spec_b + ratio_bc * spec_c
+            delta_spec = spec_dT_b + ratio_bc * spec_dT_c
+            X_dT = np.vstack([
+                base_spec,
+                delta_spec,
+                np.ones_like(base_spec)
+            ]).T
+            y_dT = measurement_dT
+            W_dT = 1.0 / noise_dT
+            # W_dT = np.ones_like(noise_dT)
+
+            Xw_dT = X_dT * W_dT[:, None]
+            yw_dT = y_dT * W_dT
+            alpha_dT, beta_dT, offset_dT = np.linalg.lstsq(Xw_dT, yw_dT, rcond=None)[0]
+
+            # Evaluate fits
+            fit = gamma * (spec_b + ratio_bc * spec_c) + offset_spec
+            fit_dT = alpha_dT * base_spec + beta_dT * delta_spec + offset_dT
+            chi2 += np.sum(((measurement - fit) / noise) ** 2)
+            chi2 += np.sum(((measurement_dT - fit_dT) / noise_dT) ** 2)
+
+            save = False
+            if save:
+                import random
+                import string
+
+                def generate_random_string(length):
+                    """Generates a random string of specified length using letters and digits."""
+                    characters = string.ascii_letters + string.digits
+                    random_string = ''.join(random.choice(characters) for i in range(length))
+                    return random_string
+
+                # Example usage:
+                random_str = generate_random_string(5)
+                allf = np.vstack([fit, spec_b, spec_c, fit_dT, spec_dT_b, spec_dT_c])
+                np.savetxt(f'temp_outputs/fit_spec_{random_str}.csv', allf)
+
+            # Output scalar parameters
+            scalars = np.array([
+                float(gamma), float(ratio_bc), float(offset_spec),
+                float(alpha_dT), float(beta_dT), float(offset_dT)
+            ])
     
-    # scalars = np.array([
-    #     b_frac, c_frac, offset,
-    #     base_frac_dT, b_frac_dT, c_frac_dT, offset_dT
-    # ])
-
-    scalars = np.array([
-    float(b_frac), float(c_frac), float(offset),
-    float(base_frac_dT), float(b_frac_dT), float(c_frac_dT), float(offset_dT)])
-
     return -0.5 * chi2, scalars
 
-def model_log_likelihood(params, data_wavelength, data_flux, data_flux_dT, noise_std, noise_std_dT, central_wav = 15272):
+def model_log_likelihood_Cs(params, data_wavelength, data_flux, data_flux_dT, noise_std, noise_std_dT, central_wav = 15272):
     lp = log_prior(params)
     if not np.isfinite(lp):
-        return -np.inf, np.zeros(7)
+        if args.use_scalar_prior:
+            return -np.inf, np.zeros(7)
+        else:
+            return -np.inf, np.zeros(6)
 
     try:
         if args.B_not_equal_C:
-            T, A, B, C, frac_A, frac_B, frac_C = params
+            T, A, B, C, frac_A, frac_B, frac_C, lorentz_width = params
         else:
-            T, A, C, frac_A, frac_C = params
+            T, A, C, frac_A, frac_C, lorentz_width = params
             B = A
             frac_B = frac_A
         
-        
-        spec_txt_b, base_b = generate_pgopher_input(T, A, B, C, frac_A, frac_B, frac_C, axis='b')
+        spec_txt_b, base_b = generate_pgopher_input(T, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='b')
         _, model_flux_b = convolve_pgopher_spectrum(spec_txt_b, central_wav)
 
-        spec_txt_c, base_c = generate_pgopher_input(T, A, B, C, frac_A, frac_B, frac_C, axis='c')
+        spec_txt_c, base_c = generate_pgopher_input(T, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='c')
         _, model_flux_c = convolve_pgopher_spectrum(spec_txt_c, central_wav)
 
         if args.fit_dT:
-            spec_txt_dT_b, base_dT_b = generate_pgopher_input(T + 0.05, A, B, C, frac_A, frac_B, frac_C, axis='b')
+            spec_txt_dT_b, base_dT_b = generate_pgopher_input(T + 0.05, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='b')
             _, model_flux_dT_b = convolve_pgopher_spectrum(spec_txt_dT_b, central_wav)
 
-            spec_txt_dT_c, base_dT_c = generate_pgopher_input(T + 0.05, A, B, C, frac_A, frac_B, frac_C, axis='c')
+            spec_txt_dT_c, base_dT_c = generate_pgopher_input(T + 0.05, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='c')
             _, model_flux_dT_c = convolve_pgopher_spectrum(spec_txt_dT_c, central_wav)
         else:
             model_flux_dT_b = np.zeros_like(data_flux)
@@ -357,12 +629,13 @@ def model_log_likelihood(params, data_wavelength, data_flux, data_flux_dT, noise
             #     args.fit_spec, args.fit_dT
             # )
 
-        lnlike, scalars = compute_loglikelihood(
+        lnlike, scalars = compute_loglikelihood_Cs(
                 model_flux_b, model_flux_c,
                 model_flux_dT_b, model_flux_dT_c,
                 data_flux, data_flux_dT,
                 noise_std, noise_std_dT)
-
+        
+        # print( np.hstack([[-2*lnlike], scalars, [scalars[3]/0.31/scalars[0], scalars[4]/0.05/0.31], params]) )
         if args.fit_spec:
             for spec_txt in [spec_txt_b, spec_txt_c]:
                 base = osp.basename(spec_txt)  # e.g. spec_T20.005_A0.0026984_...txt
@@ -389,7 +662,140 @@ def model_log_likelihood(params, data_wavelength, data_flux, data_flux_dT, noise
 
     except Exception as e:
         print(f"Error for params {params}: {e}")
-        return -np.inf, np.zeros(7)
+        if args.use_scalar_prior:
+            return -np.inf, np.zeros(7)
+        else:
+            return -np.inf, np.zeros(6)
+
+def compute_loglikelihood_C2v(
+    model_flux, model_flux_dT, data_flux, data_flux_dT, noise_std, noise_std_dT ):
+    chi2 = 0.0
+    if args.use_direct:
+        c = 10  # edge crop
+    else:
+        c = 30
+
+    gf = 0.01  # Gaussian filter width
+    gamma = offset = 0
+    alpha_dT = beta_dT = offset_dT = 0
+    ratio_bc = np.nan
+
+    if args.fit_spec:
+        # Apply Gaussian filter and crop edges
+        spec = gaussian_filter(model_flux[c:-c], gf) 
+        measurement = data_flux[c:-c]
+        noise = noise_std[c:-c]
+
+        # Fit linear combination: b_frac * spec_b + c_frac * spec_c + offset
+        M = np.vstack([spec, np.ones_like(spec)]).T
+        coeffs, _, _, _ = np.linalg.lstsq(M, measurement, rcond=None)
+        gamma, offset = coeffs
+
+        # Evaluate fit
+        fit = gamma * spec + offset
+        chi = (measurement - fit) / noise
+        chi2 += np.sum(chi ** 2)
+
+    if args.fit_dT:
+        # Apply Gaussian filter and crop edges
+        spec = gaussian_filter(model_flux[c:-c], gf)
+        spec_dT = gaussian_filter(model_flux_dT[c:-c], gf) - spec
+        measurement_dT = data_flux_dT[c:-c]
+        noise_dT = noise_std_dT[c:-c]
+
+        # Form matrix: linear combo of original + delta spectra
+        M_dT = np.vstack([spec, spec_dT, np.ones_like(spec)]).T
+        coeffs_dT, _, _, _ = np.linalg.lstsq(M_dT, measurement_dT, rcond=None)
+        alpha_dT, beta_dT, offset_dT = coeffs_dT
+
+        # Evaluate fit
+        fit_dT = alpha_dT * spec + beta_dT * spec_dT+ offset_dT
+
+        chi_dT = (measurement_dT - fit_dT) / noise_dT
+        chi2 += np.sum(chi_dT ** 2)
+    save = False
+    if save:
+        import random
+        import string
+
+        def generate_random_string(length):
+            """Generates a random string of specified length using letters and digits."""
+            characters = string.ascii_letters + string.digits
+            random_string = ''.join(random.choice(characters) for i in range(length))
+            return random_string
+
+        # Example usage:
+        random_str = generate_random_string(5)
+        allf = np.vstack([fit, spec, fit_dT, spec_dT])
+        np.savetxt(f'temp_outputs/fit_spec_{random_str}.csv', allf)
+
+    # Output scalar parameters
+    scalars = np.array([
+        float(gamma), float(ratio_bc), float(offset),
+        float(alpha_dT), float(beta_dT), float(offset_dT)
+    ])
+
+    return -0.5 * chi2, scalars
+
+def model_log_likelihood_C2v(params, data_wavelength, data_flux, data_flux_dT, noise_std, noise_std_dT, central_wav = 15272):
+    lp = log_prior(params)
+    if not np.isfinite(lp):
+        if args.use_scalar_prior:
+            return -np.inf, np.zeros(7)
+        else:
+            return -np.inf, np.zeros(6)
+
+    try:
+        if args.B_not_equal_C:
+            T, A, B, C, frac_A, frac_B, frac_C, lorentz_width = params
+        else:
+            T, A, C, frac_A, frac_C, lorentz_width = params
+            B = A
+            frac_B = frac_A
+        
+        spec_txt, base = generate_pgopher_input(T, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='a')
+        _, model_flux_b = convolve_pgopher_spectrum(spec_txt, central_wav)
+
+        if args.fit_dT:
+            spec_txt_dT, base_dT = generate_pgopher_input(T + 0.05, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='a')
+            _, model_flux_dT = convolve_pgopher_spectrum(spec_txt_dT, central_wav)
+        else:
+            model_flux_dT = np.zeros_like(data_flux)
+
+        lnlike, scalars = compute_loglikelihood_C2v(
+                model_flux_b, model_flux_dT,
+                data_flux, data_flux_dT,
+                noise_std, noise_std_dT)
+        
+        # print( np.hstack([[-2*lnlike], scalars, [scalars[3]/0.31/scalars[0], scalars[4]/0.05/0.31], params]) )
+        if args.fit_spec:
+            base = osp.basename(spec_txt)  # e.g. spec_T20.005_A0.0026984_...txt
+            if base.startswith("spec_") and base.endswith(".txt"):
+                param_str = base[len("spec_"):-len(".txt")]  # strip prefix/suffix
+                temp_pgo_file = os.path.join(TEMP_DIR, f'temp_{param_str}.pgo')
+
+                # Clean up
+                os.remove(spec_txt)
+                os.remove(temp_pgo_file)
+
+        if args.fit_dT:
+            base_dT = osp.basename(spec_txt_dT)
+            if base_dT.startswith("spec_") and base_dT.endswith(".txt"):
+                param_str = base_dT[len("spec_"):-len(".txt")]
+                temp_pgo_file_dT = os.path.join(TEMP_DIR, f'temp_{param_str}.pgo')
+
+                # Clean up
+                os.remove(spec_txt_dT)
+                os.remove(temp_pgo_file_dT)
+
+        return lnlike + lp, scalars
+
+    except Exception as e:
+        print(f"Error for params {params}: {e}")
+        if args.use_scalar_prior:
+            return -np.inf, np.zeros(7)
+        else:
+            return -np.inf, np.zeros(6)
 
 # Clear TEMP_DIR on start
 for file in Path(TEMP_DIR).iterdir():
@@ -397,13 +803,15 @@ for file in Path(TEMP_DIR).iterdir():
         file.unlink()
 
 if args.B_not_equal_C:
-    ndim = 7
-    p0_center = [20, 0.02, 0.003, 0.003, 0.99, 0.99, 0.99] # T, A, B, C, frac_A, frac_B, frac_C
-    step_scales = [15, 0.005, 0.0015, 0.0015, 0.001, 0.001, 0.001]
+    ndim = 8
+    p0_center = [20, 0.02, 0.003, 0.003, 0.999, 0.999, 0.999, 0.5] # T, A, B, C, frac_A, frac_B, frac_C, lorentz
+    step_scales = [15, 0.005, 0.0015, 0.0015, 0.0001, 0.0001, 0.0001, 0.2]
+    # step_scales = [0.1, 0.000005, 0.0000015, 0.0000015, 0.000001, 0.000001, 0.000001]
+
 else:
-    ndim = 5
-    p0_center = [20, 0.02, 0.003, 0.99, 0.99]  # T, AB, C, frac_AB, frac_C
-    step_scales = [15, 0.005, 0.0015, 0.001, 0.001]
+    ndim = 6
+    p0_center = [20, 0.02, 0.003, 0.99, 0.95, 0.5]  # T, AB, C, frac_AB, frac_C
+    step_scales = [15, 0.005, 0.0015, 0.001, 0.001, 0.2]
 
 nsteps = args.nsteps
 ncpu_to_use = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else max(1, os.cpu_count())
@@ -412,7 +820,7 @@ print(f"Using {ncpu_to_use} CPUs")
 
 fudge = float(args.fudge) #how much to inflate errors that we may not believe in
 
-DIB_15272 = h5py.File('new_errs/res_dib_15272.h5', "r")
+DIB_15272 = h5py.File(osp.expanduser('~/DIB/new_errs/res_dib_15272.h5'), "r")
 data_wavelength = DIB_15272['wav'][:]
 data_flux = DIB_15272['mean'][:][:,0]
 data_flux_dT = DIB_15272['mean'][:][:,1]
@@ -424,18 +832,20 @@ if args.use_direct:
     data_flux = DIB_15272['mean'][:][:,0]
     data_flux_dT = DIB_15272['mean'][:][:,1]
 else:
-    errs0 = h5py.File('jackknife_dib.h5', "r")
-    measurements = pd.read_csv('pca_version.txt', sep='\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
+    errs0 = h5py.File(osp.expanduser('~/DIB/jackknife_dib.h5'), "r")
+    measurements = pd.read_csv(osp.expanduser('~/DIB/pca_version.txt'), sep='\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
     data_flux = measurements['PC1_1'].values
     data_flux_dT = measurements['PC2_2'].values
     if args.cov:
-        noise_std1 = errs0['cov'][:, :, 0]
-        noise_std2 = errs0['cov'][:, :, 1]
+        noise_std = errs0['cov'][:, :, 0]
+        noise_std_dT = errs0['cov'][:, :, 1]
     else:
-        noise_std1 = fudge * np.sqrt(errs0['var'][:, 0])
-        noise_std2 = np.sqrt(errs0['var'][:, 1])
-
-
+        noise_std = fudge * np.sqrt(errs0['var'][:, 0])
+        noise_std_dT = np.sqrt(errs0['var'][:, 1])
+        print(noise_std.shape)
+        print(data_flux.shape)
+        print(noise_std_dT.shape)
+        print(data_flux_dT.shape)
 
 backend_file = osp.expanduser(f"~/../../scratch/gpfs/cj1223/DIB/bc_run_{TEMP_SUFFIX}.h5")
 if osp.exists(backend_file):
@@ -453,23 +863,36 @@ with get_context("fork").Pool(processes=ncpu_to_use) as pool:
     f"- {'Flat priors' if args.flat_prior else 'Priors chosen by Andrew and I'}\n"
     f"- {'Using diagonal of covariance only' if not args.cov else 'Using full covariance'}\n"
     f"- Fitting main spectrum: {args.fit_spec}\n"
-    f"- Fitting temperature derivative: {args.fit_dT}") 
+    f"- Fitting temperature derivative: {args.fit_dT}\n"
+    f"- Using {args.symmetry_group} symmetry\n"
+    f"- {'Doing non-linear scalar fits' if args.nonlinear_fit else 'Doing linear scalar fits'}\n"
+    f"- {'Fitting b/c ratio with a prior' if args.use_scalar_prior else 'Doing joint, exact, b/c fits'}\n" ) 
 
-    sampler = emcee.EnsembleSampler(
-        nwalkers,
-        ndim,
-        model_log_likelihood,
-        args=(data_wavelength, data_flux, data_flux_dT, noise_std, noise_std_dT),
-        pool=pool,
-        backend=backend
-    )
+    if args.symmetry_group == 'Cs':
+        sampler = emcee.EnsembleSampler(
+            nwalkers,
+            ndim,
+            model_log_likelihood_Cs,
+            args=(data_wavelength, data_flux, data_flux_dT, noise_std, noise_std_dT),
+            pool=pool,
+            backend=backend
+        )
 
+    if args.symmetry_group == 'C2v':
+        sampler = emcee.EnsembleSampler(
+            nwalkers,
+            ndim,
+            model_log_likelihood_C2v,
+            args=(data_wavelength, data_flux, data_flux_dT, noise_std, noise_std_dT),
+            pool=pool,
+            backend=backend
+        )
     p0 = np.array([
         p0_center + np.array(step_scales) / np.sqrt(nwalkers) * np.random.normal(size=ndim)
         for _ in range(nwalkers)
     ])
-
-    p0[:,3] = (1/p0[:,2]+1/p0[:,1])**(-1)
+    if args.B_not_equal_C:
+        p0[:,3] = (1/p0[:,2]+1/p0[:,1])**(-1)
 
     startm = time.time()
     sampler.run_mcmc(p0, nsteps, progress=True)

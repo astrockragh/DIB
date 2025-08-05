@@ -1,4 +1,5 @@
 *.out
 pgo_temppy
+temp_outputs
 .ipynb_checkpoints
 __pycache__

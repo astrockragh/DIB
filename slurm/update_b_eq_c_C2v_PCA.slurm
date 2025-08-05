@@ -11,4 +11,4 @@
 module purge
 module load anaconda3/2022.5
 source activate torch-env
-python ../run_emcee_asym_more_options_fast.py --B_not_equal_C 0 -fudge 1 -use_direct 0 -flat_prior 0 -fit_spec 1 -fit_dT 1 -cov 0 -symmetry_group C2v -nsteps 10000 -use_scalar_prior 0 --nonlinear_fit 0 -title update
+python ../run_emcee_asym_more_options_fast.py --B_not_equal_C 0 -fudge 1 -use_direct 0 -flat_prior 0 -fit_spec 1 -fit_dT 1 -cov 0 -symmetry_group C2v -nsteps 10000 -use_scalar_prior 0 --nonlinear_fit 0 -tau_prior 0.05 -title update

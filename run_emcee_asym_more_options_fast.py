@@ -71,6 +71,12 @@ def parse_args():
                         type=lambda x: x.lower() in ['true', '1', 'yes'],
                         default=False,
                         help="Use a prior on the b/c ratio instead of a direct ")
+    
+    parser.add_argument("-tau_prior", "--tau_prior",
+                        type=float,
+                        default=0.05,
+                        help="Slope on the exponential prior for lifetime broadening [cm^{-1}]")
+    
     return parser.parse_args()
 
 args = parse_args()
@@ -85,13 +91,13 @@ def val_to_str(v):
 
 TEMP_SUFFIX = f"Symmetry{val_to_str(args.symmetry_group)}_BC{val_to_str(args.B_not_equal_C)}_F{val_to_str(args.fudge)}_D{val_to_str(args.use_direct)}_" + \
               f"Flat{val_to_str(args.flat_prior)}_Spec{val_to_str(args.fit_spec)}_dT{val_to_str(args.fit_dT)}_cov{val_to_str(args.cov)}_nonlin{val_to_str(args.nonlinear_fit)}"+ \
-              f'_{args.title}'
+              f'_tauSlope{val_to_str(args.tau_prior)}_{args.title}'
 
 # Constants
 if args.symmetry_group == 'Cs':
-    PGO_TEMPLATE = osp.expanduser("~/DIB/asym_top_15272_Cs.pgo")
+    PGO_TEMPLATE = osp.expanduser("~/DIB/pgo_files/asym_top_15272_Cs.pgo")
 if args.symmetry_group == 'C2v':
-    PGO_TEMPLATE = osp.expanduser("~/DIB/asym_top_15272_C2v.pgo")
+    PGO_TEMPLATE = osp.expanduser("~/DIB/pgo_files/asym_top_15272_C2v.pgo")
 
 TEMP_DIR = osp.expanduser(f"~/../../scratch/gpfs/cj1223/DIB/pgo_temppy_{TEMP_SUFFIX}")
 os.makedirs(TEMP_DIR, exist_ok=True)
@@ -273,7 +279,7 @@ def convolve_pgopher_spectrum(spectrum_file, center_wav, lsf_key='LCO+APO', dlam
 
     return wav_load, flux_on_lsf_grid
 
-def log_prior(params):
+def log_prior_Cs(params):
     if args.B_not_equal_C:
         if len(params) != 8:
             return -np.inf
@@ -282,8 +288,8 @@ def log_prior(params):
         if len(params) != 6:
             return -np.inf
         T, A, C, frac_A, frac_C, lorentz_width = params
-        B = A
-        frac_B = frac_A
+        B = C
+        frac_B = frac_C
 
     if args.flat_prior:
         if not (3 <= T <= 100): return -np.inf
@@ -298,34 +304,102 @@ def log_prior(params):
     else:
         if T <= 3 or T > 100: return -np.inf
         ## params for log-normal Temp prior
-        mu = np.log(30)
-        sigma = 1
+        mu = np.log(25)
+        sigma = 0.4
         temp_logprior = -np.log(T * sigma * np.sqrt(2 * np.pi)) - ((np.log(T) - mu) ** 2) / (2 * sigma ** 2)
 
-        if C < 0.0005 or C > 0.04: return -np.inf
-        if B < 0.0005 or B > 0.04: return -np.inf
-        if not (0.0 <= lorentz_width <= 1.0): return -np.inf
-        # if C>=B: return np.inf # if enforcing hierarchy
+        if C < 0.0005 or C > 0.3: return -np.inf
+        if B < 0.0005 or B > 0.3: return -np.inf
+        if not (0.0 <= lorentz_width <= 1.0):
+            return -np.inf
         else:
-            if args.B_not_equal_C:
-                C0 = (1/A+1/B)**(-1)
-                CB_logprior = - ( (C-C0)/( np.sqrt(2) * 1 * C0 ) )**2
-            else:
-                CB_logprior = 0.0
+            lorentz_width_prior = - (lorentz_width/args.tau_prior) #exponential
+        
+        if B>A:
+            print('ARGH')
+            return np.inf # if enforcing hierarchy
+        if args.B_not_equal_C:
+            if C>=B: return np.inf # if enforcing hierarchy
+        
+        if args.B_not_equal_C:
+            C0 = (1/A+1/B)**(-1)
+            CB_logprior = - ( (C-C0)/( np.sqrt(2) * 1 * C0 ) )**2
+        else:
+            CB_logprior = 0.0
 
         if A < 0.001 or A > 0.3: return -np.inf
+        A_logprior = - ((0.013 - C)**2/(2*0.02**2))
+
+        if frac_A > 1: return -np.inf
+        frac_a_logprior = -100 * (frac_A - 1) ** 2
+
+        if frac_B > 1: return -np.inf
+        frac_b_logprior = -100 * (frac_B - 1) ** 2
+
+        if frac_C > 1: return -np.inf
+        frac_c_logprior = -100 * (frac_C - 1) ** 2
+
+        return temp_logprior + CB_logprior + A_logprior + frac_a_logprior + frac_b_logprior + frac_c_logprior + lorentz_width_prior
+
+def log_prior_C2v(params):
+    if args.B_not_equal_C:
+        if len(params) != 8:
+            return -np.inf
+        T, A, B, C, frac_A, frac_B, frac_C, lorentz_width  = params
+    else:
+        if len(params) != 6:
+            return -np.inf
+        T, A, C, frac_A, frac_C, lorentz_width = params
+        B = A
+        frac_B = frac_A
+
+    if args.flat_prior:
+        if not (3 <= T <= 100): return -np.inf
+        if not (0.0001 <= C <= 0.3): return -np.inf
+        if not (0.0001 <= B <= 0.3): return -np.inf
+        if not (0.0001 <= A <= 0.3): return -np.inf
+        if not (0.9 <= frac_A <= 1.0): return -np.inf
+        if not (0.9 <= frac_B <= 1.0): return -np.inf
+        if not (0.9 <= frac_C <= 1.0): return -np.inf
+        if not (0.0 <= lorentz_width <= 1.0): return -np.inf
+        return 0.0
+    else:
+        if T <= 3 or T > 100: return -np.inf
+        ## params for log-normal Temp prior
+        mu = np.log(25)
+        sigma = 0.4
+        temp_logprior = -np.log(T * sigma * np.sqrt(2 * np.pi)) - ((np.log(T) - mu) ** 2) / (2 * sigma ** 2)
+
+        if C < 0.0005 or C > 0.3: return -np.inf
+        C_logprior = - ((0.013 - C)**2/(2*0.02**2))
+        if B < 0.0005 or B > 0.3: return -np.inf
+        if not (0.0 <= lorentz_width <= 1.0):
+            return -np.inf
+        
+        lorentz_width_prior = - (lorentz_width/args.tau_prior) #exponential
+        
+        if C<=B: return np.inf # if enforcing hierarchy
+        if args.B_not_equal_C:
+            if B<=A: return np.inf # if enforcing hierarchy
+
+        if A < 0.0005 or A > 0.3: return -np.inf
         A_logprior = 0.0
 
         if frac_A > 1: return -np.inf
-        frac_a_logprior = -10 * (frac_A - 1) ** 2
+        frac_a_logprior = -100 * (frac_A - 1) ** 2
 
         if frac_B > 1: return -np.inf
-        frac_b_logprior = -10 * (frac_B - 1) ** 2
+        frac_b_logprior = -100 * (frac_B - 1) ** 2
 
         if frac_C > 1: return -np.inf
-        frac_c_logprior = -10 * (frac_C - 1) ** 2
+        frac_c_logprior = -100 * (frac_C - 1) ** 2
 
-        return temp_logprior + CB_logprior + A_logprior + frac_a_logprior + frac_b_logprior + frac_c_logprior
+        return temp_logprior + C_logprior + A_logprior + frac_a_logprior + frac_b_logprior + frac_c_logprior + lorentz_width_prior
+
+if args.symmetry_group == 'Cs':
+    log_prior = log_prior_Cs
+if args.symmetry_group == 'C2v':
+    log_prior = log_prior_C2v
 
 def compute_loglikelihood_Cs(
     model_flux_b, model_flux_c,
@@ -596,8 +670,8 @@ def model_log_likelihood_Cs(params, data_wavelength, data_flux, data_flux_dT, no
             T, A, B, C, frac_A, frac_B, frac_C, lorentz_width = params
         else:
             T, A, C, frac_A, frac_C, lorentz_width = params
-            B = A
-            frac_B = frac_A
+            B = C
+            frac_B = frac_C
         
         spec_txt_b, base_b = generate_pgopher_input(T, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='b')
         _, model_flux_b = convolve_pgopher_spectrum(spec_txt_b, central_wav)
@@ -804,14 +878,24 @@ for file in Path(TEMP_DIR).iterdir():
 
 if args.B_not_equal_C:
     ndim = 8
-    p0_center = [20, 0.02, 0.003, 0.003, 0.999, 0.999, 0.999, 0.5] # T, A, B, C, frac_A, frac_B, frac_C, lorentz
-    step_scales = [15, 0.005, 0.0015, 0.0015, 0.0001, 0.0001, 0.0001, 0.2]
-    # step_scales = [0.1, 0.000005, 0.0000015, 0.0000015, 0.000001, 0.000001, 0.000001]
+    if args.symmetry_group == 'Cs':
+        p0_center = [20, 0.02, 0.004, 0.003, 0.999, 0.999, 0.999, 0.1] # T, A, B, C, frac_A, frac_B, frac_C, lorentz
+        step_scales = [15, 0.005, 0.0015, 0.0015, 0.001, 0.001, 0.001, 0.05]
+        # step_scales = [0.1, 0.000005, 0.0000015, 0.0000015, 0.000001, 0.000001, 0.000001]
 
+    if args.symmetry_group == 'C2v':
+        p0_center = [20, 0.003, 0.004, 0.02, 0.999, 0.999, 0.999, 0.1] # T, A, B, C, frac_A, frac_B, frac_C, lorentz
+        step_scales = [15, 0.0015, 0.0015, 0.005, 0.001, 0.001, 0.001, 0.05]
+        # step_scales = [0.1, 0.000005, 0.0000015, 0.0000015, 0.000001, 0.000001, 0.000001]
 else:
     ndim = 6
-    p0_center = [20, 0.02, 0.003, 0.99, 0.95, 0.5]  # T, AB, C, frac_AB, frac_C
-    step_scales = [15, 0.005, 0.0015, 0.001, 0.001, 0.2]
+    if args.symmetry_group == 'Cs':
+        p0_center = [20, 0.02, 0.003, 0.99, 0.95, 0.1]  # T, A, BC, frac_AB, frac_C
+        step_scales = [15, 0.005, 0.0015, 0.001, 0.001, 0.05]
+    if args.symmetry_group == 'C2v': ## pay attention to how the nomenclature changes!
+        p0_center = [20, 0.003, 0.02, 0.99, 0.99, 0.1]  # T, AB, C, frac_AB, frac_C
+        step_scales = [15, 0.0015, 0.005, 0.001, 0.001, 0.05]
+    
 
 nsteps = args.nsteps
 ncpu_to_use = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else max(1, os.cpu_count())
@@ -866,6 +950,7 @@ with get_context("fork").Pool(processes=ncpu_to_use) as pool:
     f"- Fitting temperature derivative: {args.fit_dT}\n"
     f"- Using {args.symmetry_group} symmetry\n"
     f"- {'Doing non-linear scalar fits' if args.nonlinear_fit else 'Doing linear scalar fits'}\n"
+    f"- Using {args.tau_prior} inverse cm as a prior slope on the exponential prior on Lorentzian broadening\n"
     f"- {'Fitting b/c ratio with a prior' if args.use_scalar_prior else 'Doing joint, exact, b/c fits'}\n" ) 
 
     if args.symmetry_group == 'Cs':
@@ -891,8 +976,6 @@ with get_context("fork").Pool(processes=ncpu_to_use) as pool:
         p0_center + np.array(step_scales) / np.sqrt(nwalkers) * np.random.normal(size=ndim)
         for _ in range(nwalkers)
     ])
-    if args.B_not_equal_C:
-        p0[:,3] = (1/p0[:,2]+1/p0[:,1])**(-1)
 
     startm = time.time()
     sampler.run_mcmc(p0, nsteps, progress=True)

@@ -105,6 +105,7 @@ if args.symmetry_group == 'C2v':
     PGO_TEMPLATE = osp.expanduser("~/DIB/pgo_files/asym_top_15272_C2v.pgo")
 
 TEMP_DIR = osp.expanduser(f"~/../../scratch/gpfs/cj1223/DIB/pgo_temppy_{TEMP_SUFFIX}")
+
 os.makedirs(TEMP_DIR, exist_ok=True)
 shutil.rmtree(TEMP_DIR, ignore_errors=False, onerror=None)
 os.makedirs(TEMP_DIR, exist_ok=True)
@@ -487,6 +488,133 @@ def compute_loglikelihood_Cs(
     else:
         ## New as of August 4th, doing joint fit for the ratio between b- and c-type transitions
         ## I think that this has to be non-linear, so switching to scipy.optimize
+        if args.fit_spec and not args.fit_dT :
+            from scipy.optimize import least_squares
+            
+            # Apply Gaussian filters and crop
+            spec_b = gaussian_filter(model_flux_b[c:-c], gf)
+            spec_c = gaussian_filter(model_flux_c[c:-c], gf)
+            measurement = data_flux[c:-c]
+            noise = noise_std[c:-c]
+            
+            # Fit linear combination: b_frac * spec_b + c_frac * spec_c + offset
+            M = np.vstack([spec_b, spec_c, np.ones_like(spec_b)]).T
+            coeffs, _, _, _ = np.linalg.lstsq(M, measurement, rcond=None)
+            b_frac, c_frac, offset = coeffs
+
+            # Evaluate fit
+            fit = b_frac * spec_b + c_frac * spec_c + offset
+            chi = (measurement - fit) / noise
+            chi2 += np.sum(chi ** 2)
+
+            scalars = np.array([
+                float(b_frac), float(c_frac), float(offset),
+                np.nan, np.nan, np.nan])
+            
+
+        if not args.fit_spec and args.fit_dT:
+            from scipy.optimize import minimize
+            # Apply Gaussian filters and crop
+            spec_b = gaussian_filter(model_flux_b[c:-c], gf)
+            spec_c = gaussian_filter(model_flux_c[c:-c], gf)
+            measurement = data_flux[c:-c]
+            noise = noise_std[c:-c]
+
+            spec_dT_b = gaussian_filter(model_flux_dT_b[c:-c]-model_flux_b[c:-c], gf)
+            spec_dT_c = gaussian_filter(model_flux_dT_c[c:-c]-model_flux_c[c:-c], gf)
+            measurement_dT = data_flux_dT[c:-c]
+            noise_dT = noise_std_dT[c:-c]
+
+            # Residual function for minimize (only depends on ratio_bc)
+            def objective(ratio_bc):
+                # Build design matrix for spec fit: gamma * (spec_b + ratio_bc * spec_c) + offset_spec
+
+                base_spec = spec_b + ratio_bc * spec_c
+                delta_spec = spec_dT_b + ratio_bc * spec_dT_c
+                X_spec = np.vstack([
+                    base_spec,
+                    np.ones_like(base_spec)
+                ]).T
+                y_spec = measurement
+
+                # Weighted linear least squares for spec
+                W_spec = 1.0 / noise
+                Xw_spec = X_spec * W_spec[:, None]
+                yw_spec = y_spec * W_spec
+                coeffs_spec, _, _, _ = np.linalg.lstsq(Xw_spec, yw_spec, rcond=None)
+                gamma, offset_spec = coeffs_spec
+
+                # Build design matrix for dT fit:            
+                X_dT = np.vstack([
+                    base_spec,
+                    delta_spec,
+                    np.ones_like(base_spec)
+                ]).T
+                y_dT = measurement_dT
+
+                # Weighted linear least squares for dT
+                W_dT = 1.0 / noise_dT
+                Xw_dT = X_dT * W_dT[:, None]
+                yw_dT = y_dT * W_dT
+                coeffs_dT, _, _, _ = np.linalg.lstsq(Xw_dT, yw_dT, rcond=None)
+                alpha_dT, beta_dT, offset_dT = coeffs_dT
+
+                # Compute total chi-squared
+                fit_spec = gamma * base_spec + offset_spec
+                fit_dT = alpha_dT * base_spec + beta_dT * delta_spec + offset_dT
+                chi2_spec = np.sum(((measurement - fit_spec) / noise) ** 2)
+                chi2_dT = np.sum(((measurement_dT - fit_dT) / noise_dT) ** 2)
+
+                return chi2_spec + chi2_dT
+
+            # Run outer optimization over ratio_bc
+            opt_result = minimize(objective, x0=[1.0], method='L-BFGS-B')
+
+            # Optimal ratio_bc
+            ratio_bc = opt_result.x[0]
+
+            # Final linear fits with optimal ratio_bc
+            # Main spectrum
+            X_spec = np.vstack([
+                spec_b + ratio_bc * spec_c,
+                np.ones_like(spec_b)
+            ]).T
+            y_spec = measurement
+            W_spec = 1.0 / noise
+            # W_dT = np.ones_like(noise)
+            Xw_spec = X_spec * W_spec[:, None]
+            yw_spec = y_spec * W_spec
+            gamma, offset_spec = np.linalg.lstsq(Xw_spec, yw_spec, rcond=None)[0]
+
+            # dT spectrum
+            base_spec = spec_b + ratio_bc * spec_c
+            delta_spec = spec_dT_b + ratio_bc * spec_dT_c
+            X_dT = np.vstack([
+                base_spec,
+                delta_spec,
+                np.ones_like(base_spec)
+            ]).T
+            y_dT = measurement_dT
+            W_dT = 1.0 / noise_dT
+            # W_dT = np.ones_like(noise_dT)
+
+            Xw_dT = X_dT * W_dT[:, None]
+            yw_dT = y_dT * W_dT
+            alpha_dT, beta_dT, offset_dT = np.linalg.lstsq(Xw_dT, yw_dT, rcond=None)[0]
+
+            # Evaluate fits
+            fit = gamma * (spec_b + ratio_bc * spec_c) + offset_spec
+            fit_dT = alpha_dT * base_spec + beta_dT * delta_spec + offset_dT
+            chi2 += np.sum(((measurement - fit) / noise) ** 2)
+            chi2 += np.sum(((measurement_dT - fit_dT) / noise_dT) ** 2)
+
+            # print( ratio_bc )
+            # Output scalar parameters
+            scalars = np.array([
+                float(gamma), float(ratio_bc), float(offset_spec),
+                float(alpha_dT), float(beta_dT), float(offset_dT)
+            ])
+
         if args.fit_spec and args.fit_dT and args.nonlinear_fit: 
             from scipy.optimize import least_squares
             
@@ -698,27 +826,12 @@ def model_log_likelihood_Cs(params, data_wavelength, data_flux, data_flux_dT, no
             model_flux_dT_b = np.zeros_like(data_flux)
             model_flux_dT_c = np.zeros_like(data_flux)
 
-        # if args.cov:
-        #     lnlike, scalars = compute_loglikelihood_cov(
-        #     model_flux, model_flux_dT,
-        #     data_flux, data_flux_dT,
-        #     noise_std, noise_std_dT,
-        #     args.fit_spec, args.fit_dT) 
-        # else:
-            # lnlike, scalars = compute_loglikelihood(
-            #     model_flux, model_flux_dT,
-            #     data_flux, data_flux_dT,
-            #     noise_std, noise_std_dT,
-            #     args.fit_spec, args.fit_dT
-            # )
-
         lnlike, scalars = compute_loglikelihood_Cs(
                 model_flux_b, model_flux_c,
                 model_flux_dT_b, model_flux_dT_c,
                 data_flux, data_flux_dT,
                 noise_std, noise_std_dT)
         
-        # print( np.hstack([[-2*lnlike], scalars, [scalars[3]/0.31/scalars[0], scalars[4]/0.05/0.31], params]) )
         if args.fit_spec:
             for spec_txt in [spec_txt_b, spec_txt_c]:
                 base = osp.basename(spec_txt)  # e.g. spec_T20.005_A0.0026984_...txt

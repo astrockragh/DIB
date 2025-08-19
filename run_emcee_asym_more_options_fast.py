@@ -77,6 +77,11 @@ def parse_args():
                         default=0.05,
                         help="Slope on the exponential prior for lifetime broadening [cm^{-1}]")
     
+    parser.add_argument("-alpha_prior", "--alpha_prior",
+                        type=float,
+                        default=0.14,
+                        help="Standard deviation on the gaussian prior for the alpha coefficients")
+    
     return parser.parse_args()
 
 args = parse_args()
@@ -316,7 +321,6 @@ def log_prior_Cs(params):
             lorentz_width_prior = - (lorentz_width/args.tau_prior) #exponential
         
         if B>A:
-            print('ARGH')
             return np.inf # if enforcing hierarchy
         if args.B_not_equal_C:
             if C>=B: return np.inf # if enforcing hierarchy
@@ -331,12 +335,14 @@ def log_prior_Cs(params):
         A_logprior = - ((0.013 - C)**2/(2*0.02**2))
 
         if frac_A > 1: return -np.inf
-        frac_a_logprior = -100 * (frac_A - 1) ** 2
+        alpha_sig = args.alpha_prior
+        frac_a_logprior = - (frac_A - 1) ** 2 / (2*alpha_sig**2)
 
         if frac_B > 1: return -np.inf
-        frac_b_logprior = -100 * (frac_B - 1) ** 2
+        frac_b_logprior = - (frac_B - 1) ** 2 / (2*alpha_sig**2)
 
         if frac_C > 1: return -np.inf
+        frac_c_logprior = - (frac_C - 1) ** 2 / (2*alpha_sig**2)
         frac_c_logprior = -100 * (frac_C - 1) ** 2
 
         return temp_logprior + CB_logprior + A_logprior + frac_a_logprior + frac_b_logprior + frac_c_logprior + lorentz_width_prior
@@ -386,13 +392,15 @@ def log_prior_C2v(params):
         A_logprior = 0.0
 
         if frac_A > 1: return -np.inf
-        frac_a_logprior = -100 * (frac_A - 1) ** 2
+
+        alpha_sig = args.alpha_prior
+        frac_a_logprior = - (frac_A - 1) ** 2 / (2*alpha_sig**2)
 
         if frac_B > 1: return -np.inf
-        frac_b_logprior = -100 * (frac_B - 1) ** 2
+        frac_b_logprior = - (frac_B - 1) ** 2 / (2*alpha_sig**2)
 
         if frac_C > 1: return -np.inf
-        frac_c_logprior = -100 * (frac_C - 1) ** 2
+        frac_c_logprior = - (frac_C - 1) ** 2 / (2*alpha_sig**2)
 
         return temp_logprior + C_logprior + A_logprior + frac_a_logprior + frac_b_logprior + frac_c_logprior + lorentz_width_prior
 
@@ -649,6 +657,7 @@ def compute_loglikelihood_Cs(
                 allf = np.vstack([fit, spec_b, spec_c, fit_dT, spec_dT_b, spec_dT_c])
                 np.savetxt(f'temp_outputs/fit_spec_{random_str}.csv', allf)
 
+            # print( ratio_bc )
             # Output scalar parameters
             scalars = np.array([
                 float(gamma), float(ratio_bc), float(offset_spec),

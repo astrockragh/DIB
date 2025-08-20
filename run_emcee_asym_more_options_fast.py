@@ -82,6 +82,16 @@ def parse_args():
                         default=0.14,
                         help="Standard deviation on the gaussian prior for the alpha coefficients")
     
+    parser.add_argument("-old_errs", "--old_errs",
+                        type=lambda x: x.lower() in ['true', '1', 'yes'],
+                        default=False,
+                        help="If True, use the former errors that Andrew had computed")
+    
+    parser.add_argument("-extra_truncation", "--extra_truncation",
+                        type=int,
+                        default=0,
+                        help="How much further should the data be truncated? Measured in wavelength bins (default: 0)")
+    
     return parser.parse_args()
 
 args = parse_args()
@@ -272,7 +282,7 @@ def convolve_pgopher_spectrum(spectrum_file, center_wav, lsf_key='LCO+APO', dlam
     # === Interpolate back to original PGOPHER (or LSF) grid ===
     out_interp = interp1d(wav_reg, convolved_flux, bounds_error=False, fill_value=0.0)
 
-    if args.use_direct:
+    if args.use_direct and not args.old_errs:
         lsf_file = osp.expanduser('~/DIB/LSFs/lsf_15272.h5')
         # Load LSF and its wavelength grid
         with h5py.File(lsf_file, 'r') as f:
@@ -418,10 +428,10 @@ def compute_loglikelihood_Cs(
 ):
     chi2 = 0.0
 
-    if args.use_direct:
-        c = 10  # edge crop
+    if args.use_direct and not args.old_errs:
+        c = 10 + args.extra_truncation # edge crop
     else:
-        c = 30
+        c = 30 + args.extra_truncation
 
     gf = 0.01  # Gaussian filter width
     b_frac = c_frac = offset = 0
@@ -866,10 +876,10 @@ def model_log_likelihood_Cs(params, data_wavelength, data_flux, data_flux_dT, no
 def compute_loglikelihood_C2v(
     model_flux, model_flux_dT, data_flux, data_flux_dT, noise_std, noise_std_dT ):
     chi2 = 0.0
-    if args.use_direct:
-        c = 10  # edge crop
+    if args.use_direct and not args.old_errs:
+        c = 10 + args.extra_truncation # edge crop
     else:
-        c = 30
+        c = 30 + args.extra_truncation
 
     gf = 0.01  # Gaussian filter width
     gamma = offset = 0
@@ -1037,6 +1047,18 @@ noise_std_dT = fudge*np.sqrt(DIB_15272['var'][:][:,1])
 if args.use_direct:
     data_flux = DIB_15272['mean'][:][:,0]
     data_flux_dT = DIB_15272['mean'][:][:,1]
+    if args.old_errs:
+        errs0 = h5py.File(osp.expanduser('~/DIB/jackknife_dib.h5'), "r")
+        measurements = pd.read_csv(osp.expanduser('~/DIB/pca_version.txt'), sep='\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
+        data_wavelength = measurements['wavelength']
+        data_flux = errs0['mean'][0,:,0]
+        data_flux_dT = errs0['mean'][0,:,1]
+        if args.cov:
+            noise_std = errs0['cov'][:, :, 0]
+            noise_std_dT = errs0['cov'][:, :, 1]
+        else:
+            noise_std = fudge * np.sqrt(errs0['var'][:, 0])
+            noise_std_dT = np.sqrt(errs0['var'][:, 1])
 else:
     errs0 = h5py.File(osp.expanduser('~/DIB/jackknife_dib.h5'), "r")
     measurements = pd.read_csv(osp.expanduser('~/DIB/pca_version.txt'), sep='\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])

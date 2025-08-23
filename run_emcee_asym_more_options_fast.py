@@ -85,17 +85,23 @@ def parse_args():
     parser.add_argument("-old_errs", "--old_errs",
                         type=lambda x: x.lower() in ['true', '1', 'yes'],
                         default=False,
-                        help="If True, use the former errors that Andrew had computed")
+                        help="If True, use the former errors that Andrew had computed which are very tight")
     
     parser.add_argument("-extra_truncation", "--extra_truncation",
                         type=int,
                         default=0,
                         help="How much further should the data be truncated? Measured in wavelength bins (default: 0)")
     
+    parser.add_argument("-plate_errs", "--plate_errs",
+                        type=lambda x: x.lower() in ['true', '1', 'yes'],
+                        default=False,
+                        help="If True, use the new errors which were jackknifed over plates, it ends up somewhere between old/new errs")
+    
     return parser.parse_args()
 
 args = parse_args()
 
+assert not args.old_errs and args.plate_errs, "Cannot both want to use old errors and new plate jackknifed errors. Set either --old_errs OR --plate_errs to True."
 # Compose TEMP_SUFFIX and TEMP_DIR depending on all args
 def val_to_str(v):
     if isinstance(v, bool):
@@ -104,9 +110,15 @@ def val_to_str(v):
         return str(v).replace('.', 'p')
     return str(v)
 
+errType = 'Default'
+if args.old_errs:
+    errType = 'Old'
+if args.plate_errs:
+    errType = 'Plate'
+
 TEMP_SUFFIX = f"Symmetry{val_to_str(args.symmetry_group)}_BC{val_to_str(args.B_not_equal_C)}_F{val_to_str(args.fudge)}_D{val_to_str(args.use_direct)}_" + \
               f"Flat{val_to_str(args.flat_prior)}_Spec{val_to_str(args.fit_spec)}_dT{val_to_str(args.fit_dT)}_cov{val_to_str(args.cov)}_nonlin{val_to_str(args.nonlinear_fit)}"+ \
-              f'_tauSlope{val_to_str(args.tau_prior)}_{args.title}'
+              f'_tauSlope{val_to_str(args.tau_prior)}_alphaSlope{val_to_str(args.alpha_prior)}_err{errType}_trunc{args.extra_truncation}_{args.title}'
 
 # Constants
 if args.symmetry_group == 'Cs':
@@ -1059,6 +1071,17 @@ if args.use_direct:
         else:
             noise_std = fudge * np.sqrt(errs0['var'][:, 0])
             noise_std_dT = np.sqrt(errs0['var'][:, 1])
+    if args.plate_errs:
+        errs0 = h5py.File(osp.expanduser('~/DIB/new_errs/jackknife_plates_dib_15272.h5'), "r")
+        data_flux = errs0['mean'][:,0]
+        data_flux_dT = errs0['mean'][:,1]
+        if args.cov:
+            noise_std = errs0['cov'][:, :, 0]
+            noise_std_dT = errs0['cov'][:, :, 1]
+        else:
+            noise_std = fudge * np.sqrt(errs0['var'][:, 0])
+            noise_std_dT = np.sqrt(errs0['var'][:, 1])
+
 else:
     errs0 = h5py.File(osp.expanduser('~/DIB/jackknife_dib.h5'), "r")
     measurements = pd.read_csv(osp.expanduser('~/DIB/pca_version.txt'), sep='\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
@@ -1082,9 +1105,14 @@ if osp.exists(backend_file):
 backend = emcee.backends.HDFBackend(backend_file)
 
 with get_context("fork").Pool(processes=ncpu_to_use) as pool:
-    
+    errtext = 'Using default, large errors'
+    if args.old_errs:
+        errtext = 'Using old, tight, errors'
+    if args.plate_errs:
+        errtext = 'Using (newer) errors jackknifed over approximately a plate size'
+
     print(
-    f"Running MCMC with the following settings:\n"
+    f"Running MCMC with the following settings for {args.title} run:\n"
     f"- B and C treated as {'different' if args.B_not_equal_C else 'equal'}\n"
     f"- Fudge factor on noise: {args.fudge}\n"
     f"- Using {'direct' if args.use_direct else 'PCA'} spectrum data\n"
@@ -1095,6 +1123,9 @@ with get_context("fork").Pool(processes=ncpu_to_use) as pool:
     f"- Using {args.symmetry_group} symmetry\n"
     f"- {'Doing non-linear scalar fits' if args.nonlinear_fit else 'Doing linear scalar fits'}\n"
     f"- Using {args.tau_prior} inverse cm as a prior slope on the exponential prior on Lorentzian broadening\n"
+    f"- Using {args.alpha_prior} gaussian prior width for the vibrational stretch (alpha) in the rotational constants\n"
+    f"- {errtext}\n"
+    f"- Truncating the spectral fitting by {args.extra_truncation} extra wavelength elements\n"
     f"- {'Fitting b/c ratio with a prior' if args.use_scalar_prior else 'Doing joint, exact, b/c fits'}\n" ) 
 
     if args.symmetry_group == 'Cs':

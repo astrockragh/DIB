@@ -2,8 +2,7 @@
 <Mixture NoLineList="True" Version="PGOPHER 11.0.138 10 Dec 2020 18:41  64 bit (fpc 3.3.1 x86_64-Darwin)" nDF="5000" AllowComplex="True">
   <Parameter Name="RightScale" Float="true"/>
   <Species Name="Species" Jmax="250">
-  <AsymmetricMolecule Name="AsymmetricTop" C2zAxis="c" PointGroup="Cs" C2xAxis="a" Jmax="250">
-    <!-- <AsymmetricMolecule Name="AsymmetricTop" PointGroup="Cs" Jmax="250"> -->
+    <AsymmetricMolecule Name="AsymmetricTop" PointGroup="Cs" Jmax="250">
       <AsymmetricManifold Name="Ground" Initial="True" Jmax="250">
         <AsymmetricTop Name="v=0" Symmetry="A'">
           <Parameter Name="A" Value="0.0125"/>

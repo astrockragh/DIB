@@ -135,7 +135,7 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 def filename_base(T, A_base, B_base, C_base, frac_A, frac_B, frac_C, lorentz_width=0.01, axis = 'b'):
     return f"T{T:.3f}_A{A_base:.7f}_B{B_base:.7f}_C{C_base:.7f}_FA{frac_A:.5f}_FB{frac_B:.5f}_FC{frac_C:.5f}_ax{axis}_lifetime{lorentz_width:.3f}"
 
-def generate_pgopher_input_Cs(T, A_base, B_base, C_base, frac_A, frac_B, frac_C, lorentz_width=0.01, axis="b"):
+def generate_pgopher_input_Cs(T, A_base, B_base, C_base, frac_A, frac_B, frac_C, lorentz_width=0.01, axis="a"):
     A_g, B_g, C_g = A_base, B_base, C_base
     A_e, B_e, C_e = A_base * frac_A, B_base * frac_B, C_base * frac_C
 
@@ -832,17 +832,17 @@ def model_log_likelihood_Cs(params, data_wavelength, data_flux, data_flux_dT, no
             B = C
             frac_B = frac_C
         
-        spec_txt_b, base_b = generate_pgopher_input(T, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='b')
+        spec_txt_b, base_b = generate_pgopher_input(T, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='a')
         _, model_flux_b = convolve_pgopher_spectrum(spec_txt_b, central_wav)
 
-        spec_txt_c, base_c = generate_pgopher_input(T, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='c')
+        spec_txt_c, base_c = generate_pgopher_input(T, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='b')
         _, model_flux_c = convolve_pgopher_spectrum(spec_txt_c, central_wav)
 
         if args.fit_dT:
-            spec_txt_dT_b, base_dT_b = generate_pgopher_input(T + 0.05, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='b')
+            spec_txt_dT_b, base_dT_b = generate_pgopher_input(T + 0.05, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='a')
             _, model_flux_dT_b = convolve_pgopher_spectrum(spec_txt_dT_b, central_wav)
 
-            spec_txt_dT_c, base_dT_c = generate_pgopher_input(T + 0.05, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='c')
+            spec_txt_dT_c, base_dT_c = generate_pgopher_input(T + 0.05, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='b')
             _, model_flux_dT_c = convolve_pgopher_spectrum(spec_txt_dT_c, central_wav)
         else:
             model_flux_dT_b = np.zeros_like(data_flux)

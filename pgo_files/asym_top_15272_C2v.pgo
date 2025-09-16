@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Mixture Version="PGOPHER 11.0.138 10 Dec 2020 18:41  64 bit (fpc 3.3.1 x86_64-Darwin)" AllowComplex="True">
+<Mixture Version="PGOPHER 11.0.138 10 Dec 2020 18:41  64 bit (fpc 3.3.1 x86_64-Darwin)" nDF="5000" AllowComplex="True">
   <Species Name="Species" Jmax="250">
     <AsymmetricMolecule Name="AsymmetricTop" PointGroup="C2v" Jmax="250">
       <AsymmetricManifold Name="Ground" Initial="True" Jmax="250">

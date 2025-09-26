@@ -20,7 +20,7 @@
         </AsymmetricTop>
       </AsymmetricManifold>
       <TransitionMoments Bra="Excited" Ket="Ground">
-        <CartesianTransitionMoment Bra="v=1" Ket="v=0">
+        <CartesianTransitionMoment Axis="b" Bra="v=1" Ket="v=0">
           <Parameter Name="Strength" Float="true"/>
         </CartesianTransitionMoment>
       </TransitionMoments>
@@ -56,5 +56,5 @@
   <Parameter Name="Temperature" Value="10"/>
   <Parameter Name="Fmin" Value="6544.6395514428"/>
   <Parameter Name="Fmax" Value="6550.5"/>
-  <FormSettings Name="ConstantsWindow" ActiveObject="CartesianTransitionMoment: Species - AsymmetricTop - &lt;Excited|mu|Ground&gt; - &lt;v=1|a|v=0&gt;"/>
+  <FormSettings Name="ConstantsWindow" ActiveObject="CartesianTransitionMoment: Species - AsymmetricTop - &lt;Excited|mu|Ground&gt; - &lt;v=1|b|v=0&gt;"/>
 </Mixture>

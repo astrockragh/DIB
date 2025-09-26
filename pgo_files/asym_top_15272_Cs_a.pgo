@@ -20,7 +20,7 @@
         </AsymmetricTop>
       </AsymmetricManifold>
       <TransitionMoments Bra="Excited" Ket="Ground">
-        <CartesianTransitionMoment Bra="v=1" Ket="v=0">
+        <CartesianTransitionMoment Axis="a" Bra="v=1" Ket="v=0">
           <Parameter Name="Strength" Float="true"/>
         </CartesianTransitionMoment>
       </TransitionMoments>

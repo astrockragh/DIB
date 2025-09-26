@@ -97,6 +97,16 @@ def parse_args():
                         default=False,
                         help="If True, use the new errors which were jackknifed over plates, it ends up somewhere between old/new errs")
     
+    parser.add_argument("-balance_errs", "--balance_errs",
+                        type=lambda x: x.lower() in ['true', '1', 'yes'],
+                        default=False,
+                        help="If True, balance the errors on the DIB/dT profiles such that the relative errors on the two are the same")
+    
+    parser.add_argument("-emphasize_dT_center", "--emphasize_dT_center",
+                        type=lambda x: x.lower() in ['true', '1', 'yes'],
+                        default=False,
+                        help="If True, lower the errors at the center of the temperature profile")
+    
     return parser.parse_args()
 
 args = parse_args()
@@ -118,7 +128,7 @@ if args.plate_errs:
 
 TEMP_SUFFIX = f"Symmetry{val_to_str(args.symmetry_group)}_BC{val_to_str(args.B_not_equal_C)}_F{val_to_str(args.fudge)}_D{val_to_str(args.use_direct)}_" + \
               f"Flat{val_to_str(args.flat_prior)}_Spec{val_to_str(args.fit_spec)}_dT{val_to_str(args.fit_dT)}_cov{val_to_str(args.cov)}_nonlin{val_to_str(args.nonlinear_fit)}"+ \
-              f'_tauSlope{val_to_str(args.tau_prior)}_alphaSlope{val_to_str(args.alpha_prior)}_err{errType}_trunc{args.extra_truncation}_{args.title}'
+              f'_tauSlope{val_to_str(args.tau_prior)}_alphaSlope{val_to_str(args.alpha_prior)}_err{errType}_trunc{args.extra_truncation}_balanceErr{args.balance_errs}_dTcenter{args.emphasize_dT_center}_{args.title}'
 
 # Constants
 if args.symmetry_group == 'Cs':
@@ -142,7 +152,10 @@ def generate_pgopher_input_Cs(T, A_base, B_base, C_base, frac_A, frac_B, frac_C,
     base = filename_base(T, A_base, B_base, C_base, frac_A, frac_B, frac_C, axis = axis)
     pgo_file = os.path.join(TEMP_DIR, f"temp_{base}.pgo")
     spec_txt = os.path.join(TEMP_DIR, f"spec_{base}.txt")
-
+    if axis == 'a':
+        PGO_TEMPLATE = osp.expanduser("~/DIB/pgo_files/asym_top_15272_Cs_a.pgo")
+    if axis == 'b':
+        PGO_TEMPLATE = osp.expanduser("~/DIB/pgo_files/asym_top_15272_Cs_b.pgo")
     awk_script = f'''
     awk -v temp="{T}" \\
         -v A_ground="{A_g}" -v B_ground="{B_g}" -v C_ground="{C_g}" \\
@@ -161,15 +174,38 @@ def generate_pgopher_input_Cs(T, A_base, B_base, C_base, frac_A, frac_B, frac_C,
     inside_excited && /<Parameter Name="A" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" A_excited "\\"") }}
     inside_excited && /<Parameter Name="B" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" B_excited "\\"") }}
     inside_excited && /<Parameter Name="C" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" C_excited "\\"") }}
-    /<CartesianTransitionMoment Axis="/ {{
-        sub(/Axis="[^"]+"/, "Axis=\\"" axis "\\"")
-    }}
     /<Parameter Name="Lorentzian" Value="/ {{
         sub(/Value="[0-9.eE+-]+"/, "Value=\\"" lorentz_width "\\"")
     }}
     {{ print }}
     ' {PGO_TEMPLATE} > {pgo_file}
     '''
+    # awk -v temp="{T}" \\
+    #     -v A_ground="{A_g}" -v B_ground="{B_g}" -v C_ground="{C_g}" \\
+    #     -v A_excited="{A_e}" -v B_excited="{B_e}" -v C_excited="{C_e}" \\
+    #     -v axis="{axis}" -v lorentz_width="{lorentz_width}" '
+    # BEGIN {{ inside_ground = 0; inside_excited = 0; }}
+    # /<Parameter Name="Temperature" Value="/ {{
+    #     sub(/Value="[0-9.eE+-]+"/, "Value=\\"" temp "\\"")
+    # }}
+    # /<AsymmetricManifold Name="Ground"/ {{ inside_ground = 1 }}
+    # /<AsymmetricManifold Name="Excited"/ {{ inside_excited = 1 }}
+    # /<\/AsymmetricManifold>/ {{ inside_ground = 0; inside_excited = 0 }}
+    # inside_ground && /<Parameter Name="A" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" A_ground "\\"") }}
+    # inside_ground && /<Parameter Name="B" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" B_ground "\\"") }}
+    # inside_ground && /<Parameter Name="C" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" C_ground "\\"") }}
+    # inside_excited && /<Parameter Name="A" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" A_excited "\\"") }}
+    # inside_excited && /<Parameter Name="B" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" B_excited "\\"") }}
+    # inside_excited && /<Parameter Name="C" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" C_excited "\\"") }}
+    # /<CartesianTransitionMoment Axis="/ {{
+    #     sub(/Axis="[^"]+"/, "Axis=\\"" axis "\\"")
+    # }}
+    # /<Parameter Name="Lorentzian" Value="/ {{
+    #     sub(/Value="[0-9.eE+-]+"/, "Value=\\"" lorentz_width "\\"")
+    # }}
+    # {{ print }}
+    # ' {PGO_TEMPLATE} > {pgo_file}
+    # '''
 
     subprocess.run(awk_script, shell=True, check=True, executable="/bin/bash")
     subprocess.run([osp.expanduser("~/DIB/./pgo"), "--plot", pgo_file, spec_txt], check=True, stdout=subprocess.DEVNULL)
@@ -261,6 +297,7 @@ def convolve_pgopher_spectrum(spectrum_file, center_wav, lsf_key='LCO+APO', dlam
         convolved_flux (np.ndarray): Full-resolution convolved flux (on regular grid).
     """
     # === Load PGOPHER spectrum ===
+    
     inv_cm, flux = np.loadtxt(spectrum_file).T
     wav_pgo = 1e8 / inv_cm
 
@@ -464,8 +501,8 @@ def compute_loglikelihood_Cs(
 
             # Evaluate fit
             fit = b_frac * spec_b + c_frac * spec_c + offset
-            chi = (measurement - fit) / noise
-            chi2 += np.sum(chi ** 2)
+            chi_spec = (measurement - fit) / noise
+            chi2 += np.sum(chi_spec**2)
 
         if args.fit_dT:
             # Apply Gaussian filter and crop edges
@@ -480,7 +517,7 @@ def compute_loglikelihood_Cs(
             if args.fit_spec:
                 ratio_direct = b_frac / (c_frac + 1e-10)
             else:
-                ratio_direct = 1.0  # fallback
+                ratio_direct = 0.1  # fallback
 
             # Form matrix: linear combo of original + delta spectra
             base_spec = spec_b + ratio_direct * spec_c
@@ -496,12 +533,13 @@ def compute_loglikelihood_Cs(
                 offset_dT
             )
             chi_dT = (measurement_dT - fit_dT) / noise_dT
-            chi2 += np.sum(chi_dT ** 2)
 
             # Optional: ratio constraint on the shape of the dT contributions
             ratio_dT = b_frac_dT / (c_frac_dT + 1e-10)
             ratio_tol = 0.01 * ratio_direct
             ratio_deviation = ((ratio_dT - ratio_direct) / ratio_tol) ** 2
+
+            chi2 += np.sum(chi_dT**2)
             chi2 += ratio_deviation
         
         scalars = np.array([
@@ -630,7 +668,6 @@ def compute_loglikelihood_Cs(
             chi2 += np.sum(((measurement - fit) / noise) ** 2)
             chi2 += np.sum(((measurement_dT - fit_dT) / noise_dT) ** 2)
 
-            # print( ratio_bc )
             # Output scalar parameters
             scalars = np.array([
                 float(gamma), float(ratio_bc), float(offset_spec),
@@ -702,7 +739,7 @@ def compute_loglikelihood_Cs(
             spec_c = gaussian_filter(model_flux_c[c:-c], gf)
             measurement = data_flux[c:-c]
             noise = noise_std[c:-c]
-
+            
             spec_dT_b = gaussian_filter(model_flux_dT_b[c:-c]-model_flux_b[c:-c], gf)
             spec_dT_c = gaussian_filter(model_flux_dT_c[c:-c]-model_flux_c[c:-c], gf)
             measurement_dT = data_flux_dT[c:-c]
@@ -752,10 +789,8 @@ def compute_loglikelihood_Cs(
 
             # Run outer optimization over ratio_bc
             opt_result = minimize(objective, x0=[1.0], method='L-BFGS-B')
-
             # Optimal ratio_bc
             ratio_bc = opt_result.x[0]
-
             # Final linear fits with optimal ratio_bc
             # Main spectrum
             X_spec = np.vstack([
@@ -1098,6 +1133,23 @@ else:
         print(noise_std_dT.shape)
         print(data_flux_dT.shape)
 
+if args.emphasize_dT_center:
+    width = 7
+    emphasize_fac = 3
+    center_idx = len(noise_std_dT)//2
+    noise_std_dT[center_idx-width:center_idx+width]/=emphasize_fac
+
+if args.balance_errs:
+    peak_range = np.abs( np.nanmax(data_flux) - np.nanmin(data_flux) )
+    peak_noise_med = np.nanmedian(noise_std)
+    peak_rel_err = peak_noise_med/peak_range
+
+    dT_range = np.abs( np.nanmax(data_flux_dT) - np.nanmin(data_flux_dT) )
+    dT_noise_med = np.nanmedian(noise_std_dT)
+    dT_rel_err = dT_noise_med/dT_range
+
+    noise_std *= dT_rel_err/peak_rel_err
+
 backend_file = osp.expanduser(f"~/../../scratch/gpfs/cj1223/DIB/bc_run_{TEMP_SUFFIX}.h5")
 if osp.exists(backend_file):
     os.remove(backend_file)  # Ensure clean start
@@ -1121,12 +1173,14 @@ with get_context("fork").Pool(processes=ncpu_to_use) as pool:
     f"- Fitting main spectrum: {args.fit_spec}\n"
     f"- Fitting temperature derivative: {args.fit_dT}\n"
     f"- Using {args.symmetry_group} symmetry\n"
-    f"- {'Doing non-linear scalar fits' if args.nonlinear_fit else 'Doing linear scalar fits'}\n"
     f"- Using {args.tau_prior} inverse cm as a prior slope on the exponential prior on Lorentzian broadening\n"
     f"- Using {args.alpha_prior} gaussian prior width for the vibrational stretch (alpha) in the rotational constants\n"
     f"- {errtext}\n"
     f"- Truncating the spectral fitting by {args.extra_truncation} extra wavelength elements\n"
-    f"- {'Fitting b/c ratio with a prior' if args.use_scalar_prior else 'Doing joint, exact, b/c fits'}\n" ) 
+    f"- {'Fitting a/b ratio with a prior' if args.use_scalar_prior else 'Doing joint, exact, a/b fits'}\n"
+    f"- {'Doing non-linear scalar fits' if args.nonlinear_fit else 'Doing linear scalar fits'}\n"
+    f"- {'Reducing errors in the center of dT profile' if args.emphasize_dT_center else ''}\n"
+    f"- {'Balancing errors between DIB profile and delta-T profile' if args.balance_errs else ''}\n" ) 
 
     if args.symmetry_group == 'Cs':
         sampler = emcee.EnsembleSampler(
@@ -1156,95 +1210,6 @@ with get_context("fork").Pool(processes=ncpu_to_use) as pool:
     sampler.run_mcmc(p0, nsteps, progress=True)
     end = time.time()
     print(f"Multiprocessing took {end - startm:.1f} seconds")
-
-
-##### Former
-
-# def convolve_pgopher_spectrum(
-#     spectrum_file,
-#     center_wav,
-#     lsf_key='LCO+APO'
-# ):
-#     """
-#     Convolve a PGOPHER output spectrum directly on its own wavelength grid, then
-#     interpolate the result onto the LSF wavelength grid.
-
-#     Parameters:
-#         spectrum_file (str): Path to PGOPHER output file.
-#         lsf_file (str): Path to LSF .h5 file.
-#         lsf_key (str): 'LCO', 'APO', or 'LCO+APO'.
-#         center_on (str or float): Center of the LSF in Å. Use 'auto' for mean of PGOPHER grid.
-#         normalize_lsf (bool): Normalize LSF before convolution.
-
-#     Returns:
-#         (wav_lsf, y_interp): Tuple of LSF wavelength grid and convolved+interpolated spectrum.
-#     """
-#     # Load PGOPHER spectrum
-#     inv_cm, flux = np.loadtxt(spectrum_file).T
-#     wav_pgo = 1e8 / inv_cm  # cm⁻¹ → Å
-    
-#     lsf_file=f'LSFs/lsf_{center_wav}.h5'
-    
-#     # Load LSF and its wavelength grid
-#     with h5py.File(lsf_file, 'r') as f:
-#         wav_lsf = f['wav'][:]
-#         lsf = f['LCO'][:] if lsf_key == 'LCO' else f['APO'][:]
-#         if lsf_key == 'LCO+APO':
-#             lsf = f['LCO'][:] + f['APO'][:]
-#     # Resample LSF onto PGOPHER wavelength grid
-#     lsf_interp = interp1d(wav_lsf, lsf, bounds_error=False, fill_value=0.0)
-#     lsf_on_pgo_grid = lsf_interp(wav_pgo)
-    
-#     # print(np.max(lsf))
-#     # print(np.max(wav_pgo), np.max(wav_lsf))
-#     # print(np.max(lsf_on_pgo_grid))
-    
-#     lsf_on_pgo_grid /= np.sum(lsf_on_pgo_grid)
-
-#     # Convolve on native grid
-#     convolved_flux = fftconvolve(flux, lsf_on_pgo_grid, mode='same')
-
-#     # Interpolate final result onto wav_lsf grid
-#     final_interp = interp1d(wav_pgo, convolved_flux, bounds_error=False, fill_value=0.0)
-#     flux_on_lsf_grid = final_interp(wav_lsf)
-
-#     return wav_lsf, flux_on_lsf_grid
-
-# from scipy.interpolate import interp1d
-# from scipy.signal import convolve
-
-# def generate_pgopher_input(T, A_base, B_base, C_base, frac_A, frac_B, frac_C):
-#     A_g, B_g, C_g = A_base, B_base, C_base
-#     A_e, B_e, C_e = A_base * frac_A, B_base * frac_B, C_base * frac_C
-
-#     base = filename_base(T, A_base, B_base, C_base, frac_A, frac_B, frac_C)
-#     pgo_file = os.path.join(TEMP_DIR, f"temp_{base}.pgo")
-#     spec_txt = os.path.join(TEMP_DIR, f"spec_{base}.txt")
-
-#     awk_script = f'''
-#     awk -v temp="{T}" \\
-#         -v A_ground="{A_g}" -v B_ground="{B_g}" -v C_ground="{C_g}" \\
-#         -v A_excited="{A_e}" -v B_excited="{B_e}" -v C_excited="{C_e}" '
-#     BEGIN {{ inside_ground = 0; inside_excited = 0; }}
-#     /<Parameter Name="Temperature" Value="/ {{
-#         sub(/Value="[0-9.eE+-]+"/, "Value=\\"" temp "\\"")
-#     }}
-#     /<AsymmetricManifold Name="Ground"/ {{ inside_ground = 1 }}
-#     /<AsymmetricManifold Name="Excited"/ {{ inside_excited = 1 }}
-#     /<\/AsymmetricManifold>/ {{ inside_ground = 0; inside_excited = 0 }}
-#     inside_ground && /<Parameter Name="A" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" A_ground "\\"") }}
-#     inside_ground && /<Parameter Name="B" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" B_ground "\\"") }}
-#     inside_ground && /<Parameter Name="C" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" C_ground "\\"") }}
-#     inside_excited && /<Parameter Name="A" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" A_excited "\\"") }}
-#     inside_excited && /<Parameter Name="B" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" B_excited "\\"") }}
-#     inside_excited && /<Parameter Name="C" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" C_excited "\\"") }}
-#     {{ print }}
-#     ' {PGO_TEMPLATE} > {pgo_file}
-#     '''
-
-#     subprocess.run(awk_script, shell=True, check=True, executable="/bin/bash")
-#     subprocess.run(["./pgo", "--plot", pgo_file, spec_txt], check=True, stdout=subprocess.DEVNULL)
-#     return spec_txt, base
 
 def compute_loglikelihood_cov(model_flux, model_flux_dT, data_flux, data_flux_dT,
                           cov_spec, cov_dT, fit_spec_flag, fit_dT_flag):

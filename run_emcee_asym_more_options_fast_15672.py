@@ -107,6 +107,20 @@ def parse_args():
                         default=False,
                         help="If True, lower the errors at the center of the temperature profile")
     
+    def float_or_false(x):
+        if x.lower() in ['False', 'false', '0', 'no']:
+            return False
+        try:
+            return float(x)
+        except ValueError:
+            raise argparse.ArgumentTypeError("Must be a float or one of: False, false, 0, no")
+
+    parser.add_argument(
+        "-fit_peakcenter_offset", "--fit_peakcenter_offset",
+        type=float_or_false,
+        default=False,
+        help="If any float is given, parsed as float; otherwise False. If float, that is the cm^-1 Gaussian prior width of the center of the peak"
+    )
     return parser.parse_args()
 
 args = parse_args()
@@ -134,7 +148,9 @@ TEMP_SUFFIX = f"Symmetry{val_to_str(args.symmetry_group)}_BC{val_to_str(args.B_n
 if args.symmetry_group == 'Cs':
     PGO_TEMPLATE = osp.expanduser("~/DIB/pgo_files/asym_top_15272_Cs.pgo")
 if args.symmetry_group == 'C2v':
-    PGO_TEMPLATE = osp.expanduser("~/DIB/pgo_files/asym_top_15272_C2v.pgo")
+    # PGO_TEMPLATE = osp.expanduser("~/DIB/pgo_files/asym_top_15672_C2v.pgo")
+    PGO_TEMPLATE = osp.expanduser("~/DIB/pgo_files/asym_top_15672_C2v_w_gauss.pgo")
+
 
 TEMP_DIR = osp.expanduser(f"~/../../scratch/gpfs/cj1223/DIB/pgo_temppy_{TEMP_SUFFIX}")
 
@@ -142,14 +158,14 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 shutil.rmtree(TEMP_DIR, ignore_errors=False, onerror=None)
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-def filename_base(T, A_base, B_base, C_base, frac_A, frac_B, frac_C, lorentz_width=0.01, axis = 'b'):
-    return f"T{T:.3f}_A{A_base:.7f}_B{B_base:.7f}_C{C_base:.7f}_FA{frac_A:.5f}_FB{frac_B:.5f}_FC{frac_C:.5f}_ax{axis}_lifetime{lorentz_width:.3f}"
+def filename_base(T, A_base, B_base, C_base, frac_A, frac_B, frac_C, lorentz_width=0.01, axis = 'b', centeroffset = 0.00):
+    return f"T{T:.4f}_A{A_base:.7f}_B{B_base:.7f}_C{C_base:.7f}_FA{frac_A:.5f}_FB{frac_B:.5f}_FC{frac_C:.5f}_ax{axis}_lifetime{lorentz_width:.3f}_offset{centeroffset:.2f}"
 
-def generate_pgopher_input_Cs(T, A_base, B_base, C_base, frac_A, frac_B, frac_C, lorentz_width=0.01, axis="a"):
+def generate_pgopher_input_Cs(T, A_base, B_base, C_base, frac_A, frac_B, frac_C, lorentz_width=0.01, axis="a", center_invcm_offset = 0.0):
     A_g, B_g, C_g = A_base, B_base, C_base
     A_e, B_e, C_e = A_base * frac_A, B_base * frac_B, C_base * frac_C
-
-    base = filename_base(T, A_base, B_base, C_base, frac_A, frac_B, frac_C, axis = axis)
+    center = 6381 + center_invcm_offset
+    base = filename_base(T, A_base, B_base, C_base, frac_A, frac_B, frac_C, axis = axis, centeroffset = center_invcm_offset)
     pgo_file = os.path.join(TEMP_DIR, f"temp_{base}.pgo")
     spec_txt = os.path.join(TEMP_DIR, f"spec_{base}.txt")
     if axis == 'a':
@@ -160,7 +176,7 @@ def generate_pgopher_input_Cs(T, A_base, B_base, C_base, frac_A, frac_B, frac_C,
     awk -v temp="{T}" \\
         -v A_ground="{A_g}" -v B_ground="{B_g}" -v C_ground="{C_g}" \\
         -v A_excited="{A_e}" -v B_excited="{B_e}" -v C_excited="{C_e}" \\
-        -v axis="{axis}" -v lorentz_width="{lorentz_width}" '
+        -v axis="{axis}" -v lorentz_width="{lorentz_width}" -v center="{center}" '
     BEGIN {{ inside_ground = 0; inside_excited = 0; }}
     /<Parameter Name="Temperature" Value="/ {{
         sub(/Value="[0-9.eE+-]+"/, "Value=\\"" temp "\\"")
@@ -171,6 +187,7 @@ def generate_pgopher_input_Cs(T, A_base, B_base, C_base, frac_A, frac_B, frac_C,
     inside_ground && /<Parameter Name="A" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" A_ground "\\"") }}
     inside_ground && /<Parameter Name="B" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" B_ground "\\"") }}
     inside_ground && /<Parameter Name="C" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" C_ground "\\"") }}
+    inside_excited && /<Parameter Name="Origin" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" center "\\"") }}
     inside_excited && /<Parameter Name="A" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" A_excited "\\"") }}
     inside_excited && /<Parameter Name="B" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" B_excited "\\"") }}
     inside_excited && /<Parameter Name="C" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" C_excited "\\"") }}
@@ -186,11 +203,11 @@ def generate_pgopher_input_Cs(T, A_base, B_base, C_base, frac_A, frac_B, frac_C,
     return spec_txt, base
 
 def generate_pgopher_input_C2v(T, A_base, B_base, C_base, frac_A, frac_B, frac_C,
-                              lorentz_width=0.01, axis="a"):
+                              lorentz_width=0.01, axis="a", center_invcm_offset = 0.0):
     A_g, B_g, C_g = A_base, B_base, C_base
     A_e, B_e, C_e = A_base * frac_A, B_base * frac_B, C_base * frac_C
-
-    base = filename_base(T, A_base, B_base, C_base, frac_A, frac_B, frac_C, axis=axis)
+    center = 6381 + center_invcm_offset
+    base = filename_base(T, A_base, B_base, C_base, frac_A, frac_B, frac_C, axis = axis, centeroffset = center_invcm_offset)
     pgo_file = os.path.join(TEMP_DIR, f"temp_{base}.pgo")
     spec_txt = os.path.join(TEMP_DIR, f"spec_{base}.txt")
 
@@ -198,51 +215,27 @@ def generate_pgopher_input_C2v(T, A_base, B_base, C_base, frac_A, frac_B, frac_C
     awk -v temp="{T}" \\
         -v A_ground="{A_g}" -v B_ground="{B_g}" -v C_ground="{C_g}" \\
         -v A_excited="{A_e}" -v B_excited="{B_e}" -v C_excited="{C_e}" \\
-        -v axis="{axis}" -v lorentz_width="{lorentz_width}" '
-    BEGIN {{
-        in_ground = 0; in_excited = 0;
-    }}
-    /<AsymmetricTop Name="v=0"/ {{
-        in_ground = 1;
-    }}
-    /<AsymmetricTop Name="v=1"/ {{
-        in_excited = 1;
-    }}
-    /<\/AsymmetricTop>/ {{
-        in_ground = 0;
-        in_excited = 0;
-    }}
-    in_ground && /<Parameter Name="A" Value=/ {{
-        sub(/Value="[0-9.eE+-]+"/, "Value=\\"" A_ground "\\"")
-    }}
-    in_ground && /<Parameter Name="B" Value=/ {{
-        sub(/Value="[0-9.eE+-]+"/, "Value=\\"" B_ground "\\"")
-    }}
-    in_ground && /<Parameter Name="C" Value=/ {{
-        sub(/Value="[0-9.eE+-]+"/, "Value=\\"" C_ground "\\"")
-    }}
-    in_excited && /<Parameter Name="A" Value=/ {{
-        sub(/Value="[0-9.eE+-]+"/, "Value=\\"" A_excited "\\"")
-    }}
-    in_excited && /<Parameter Name="B" Value=/ {{
-        sub(/Value="[0-9.eE+-]+"/, "Value=\\"" B_excited "\\"")
-    }}
-    in_excited && /<Parameter Name="C" Value=/ {{
-        sub(/Value="[0-9.eE+-]+"/, "Value=\\"" C_excited "\\"")
-    }}
-    /<CartesianTransitionMoment Bra="v=1" Ket="v=0"/ {{
-        sub(/Axis="[^"]+"/, "Axis=\\"" axis "\\"")
-    }}
-    /<Parameter Name="Temperature" Value=/ {{
+        -v axis="{axis}" -v lorentz_width="{lorentz_width}" -v center="{center}" '
+    BEGIN {{ inside_ground = 0; inside_excited = 0; }}
+    /<Parameter Name="Temperature" Value="/ {{
         sub(/Value="[0-9.eE+-]+"/, "Value=\\"" temp "\\"")
     }}
-    /<Parameter Name="Lorentzian" Value=/ {{
+    /<AsymmetricManifold Name="Ground"/ {{ inside_ground = 1 }}
+    /<AsymmetricManifold Name="Excited"/ {{ inside_excited = 1 }}
+    /<\/AsymmetricManifold>/ {{ inside_ground = 0; inside_excited = 0 }}
+    inside_ground && /<Parameter Name="A" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" A_ground "\\"") }}
+    inside_ground && /<Parameter Name="B" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" B_ground "\\"") }}
+    inside_ground && /<Parameter Name="C" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" C_ground "\\"") }}
+    inside_excited && /<Parameter Name="Origin" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" center "\\"") }}
+    inside_excited && /<Parameter Name="A" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" A_excited "\\"") }}
+    inside_excited && /<Parameter Name="B" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" B_excited "\\"") }}
+    inside_excited && /<Parameter Name="C" Value="/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" C_excited "\\"") }}
+    /<Parameter Name="Lorentzian" Value="/ {{
         sub(/Value="[0-9.eE+-]+"/, "Value=\\"" lorentz_width "\\"")
     }}
     {{ print }}
     ' {PGO_TEMPLATE} > {pgo_file}
     '''
-
     subprocess.run(awk_script, shell=True, check=True, executable="/bin/bash")
     subprocess.run([osp.expanduser("~/DIB/./pgo"), "--plot", pgo_file, spec_txt], check=True, stdout=subprocess.DEVNULL)
     return spec_txt, base
@@ -252,7 +245,26 @@ if args.symmetry_group == 'Cs':
 if args.symmetry_group == 'C2v':
     generate_pgopher_input = generate_pgopher_input_C2v
 
-def convolve_pgopher_spectrum(spectrum_file, center_wav, lsf_key='LCO+APO', dlam=0.01, window=8):
+def interpolate_pgopher_spectrum(spectrum_file):
+    # === Load PGOPHER spectrum ===
+    inv_cm, flux = np.loadtxt(spectrum_file).T
+    wav_pgo = 1e8 / inv_cm
+    out_interp = interp1d(wav_pgo, flux, bounds_error=False, fill_value=0.0)
+    
+    if args.use_direct and not args.old_errs:
+        lsf_file = osp.expanduser('~/DIB/LSFs/lsf_15672.h5')
+        # Load LSF and its wavelength grid
+        with h5py.File(lsf_file, 'r') as f:
+            wav_load = f['wav'][:]
+    else:
+        measurements = pd.read_csv(osp.expanduser('~/DIB/pca_version.txt'), sep='\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
+        wav_load = measurements['wavelength']
+        
+    flux_on_lsf_grid = out_interp(wav_load)
+
+    return wav_load, flux_on_lsf_grid
+
+def convolve_pgopher_spectrum(spectrum_file, central_wav, center_invcm_offset, lsf_key='LCO+APO', dlam=0.01, window=8):
     """
     Convolve PGOPHER output using LSF evaluated on a regular wavelength grid.
 
@@ -271,11 +283,10 @@ def convolve_pgopher_spectrum(spectrum_file, center_wav, lsf_key='LCO+APO', dlam
         convolved_flux (np.ndarray): Full-resolution convolved flux (on regular grid).
     """
     # === Load PGOPHER spectrum ===
-    
     inv_cm, flux = np.loadtxt(spectrum_file).T
     wav_pgo = 1e8 / inv_cm
-
-    wavc = 15272.27178113337
+    center_invcm = 6381 + center_invcm_offset
+    wavc = 1e8/center_invcm # need
     # === Define regular wavelength grid around center ===
     wav_reg = np.arange(wavc - window, wavc + window, dlam)
 
@@ -306,7 +317,7 @@ def convolve_pgopher_spectrum(spectrum_file, center_wav, lsf_key='LCO+APO', dlam
     out_interp = interp1d(wav_reg, convolved_flux, bounds_error=False, fill_value=0.0)
 
     if args.use_direct and not args.old_errs:
-        lsf_file = osp.expanduser('~/DIB/LSFs/lsf_15272.h5')
+        lsf_file = osp.expanduser('~/DIB/LSFs/lsf_15672.h5')
         # Load LSF and its wavelength grid
         with h5py.File(lsf_file, 'r') as f:
             wav_load = f['wav'][:]
@@ -320,13 +331,13 @@ def convolve_pgopher_spectrum(spectrum_file, center_wav, lsf_key='LCO+APO', dlam
 
 def log_prior_Cs(params):
     if args.B_not_equal_C:
-        if len(params) != 8:
+        if len(params) != 9:
             return -np.inf
-        T, A, B, C, frac_A, frac_B, frac_C, lorentz_width  = params
+        T, A, B, C, frac_A, frac_B, frac_C, lorentz_width, center_offset  = params
     else:
-        if len(params) != 6:
+        if len(params) != 7:
             return -np.inf
-        T, A, C, frac_A, frac_C, lorentz_width = params
+        T, A, C, frac_A, frac_C, lorentz_width, center_offset = params
         B = C
         frac_B = frac_C
 
@@ -378,18 +389,20 @@ def log_prior_Cs(params):
         if frac_C > 1: return -np.inf
         frac_c_logprior = - (frac_C - 1) ** 2 / (2*alpha_sig**2)
         frac_c_logprior = -100 * (frac_C - 1) ** 2
+        if abs(center_offset)>1: return -np.inf
+        log_center_offset_prior =  -center_offset**2/(2*args.fit_peakcenter_offset**2)
 
-        return temp_logprior + CB_logprior + A_logprior + frac_a_logprior + frac_b_logprior + frac_c_logprior + lorentz_width_prior
+        return temp_logprior + CB_logprior + A_logprior + frac_a_logprior + frac_b_logprior + frac_c_logprior + lorentz_width_prior + log_center_offset_prior
 
 def log_prior_C2v(params):
     if args.B_not_equal_C:
-        if len(params) != 8:
+        if len(params) != 9:
             return -np.inf
-        T, A, B, C, frac_A, frac_B, frac_C, lorentz_width  = params
+        T, A, B, C, frac_A, frac_B, frac_C, lorentz_width, center_offset  = params
     else:
-        if len(params) != 6:
+        if len(params) != 7:
             return -np.inf
-        T, A, C, frac_A, frac_C, lorentz_width = params
+        T, A, C, frac_A, frac_C, lorentz_width, center_offset = params
         B = A
         frac_B = frac_A
 
@@ -406,37 +419,44 @@ def log_prior_C2v(params):
     else:
         if T <= 3 or T > 100: return -np.inf
         ## params for log-normal Temp prior
-        mu = np.log(25)
+        mu = np.log(15)
         sigma = 0.4
         temp_logprior = -np.log(T * sigma * np.sqrt(2 * np.pi)) - ((np.log(T) - mu) ** 2) / (2 * sigma ** 2)
 
-        if C < 0.0005 or C > 0.3: return -np.inf
-        C_logprior = - ((0.013 - C)**2/(2*0.02**2))
-        if B < 0.0005 or B > 0.3: return -np.inf
-        if not (0.0 <= lorentz_width <= 1.0):
-            return -np.inf
+        if not (0.0 <= lorentz_width <= 1.0): return -np.inf
         
-        lorentz_width_prior = - (lorentz_width/args.tau_prior) #exponential
+        lorentz_width_prior = - (lorentz_width-0.3)**2/(2*args.tau_prior**2) #exponential
         
-        if C<=B: return np.inf # if enforcing hierarchy
+        if C>=B: 
+            return -np.inf # if enforcing hierarchy
         if args.B_not_equal_C:
-            if B<=A: return np.inf # if enforcing hierarchy
+            if B>=A:
+                return -np.inf # if enforcing hierarchy
 
         if A < 0.0005 or A > 0.3: return -np.inf
-        A_logprior = 0.0
+        A_logprior = -(A - 0.08)**2/(2*0.02**2)
 
-        if frac_A > 1: return -np.inf
+        if B < 0.0005 or B > 0.3: return -np.inf
+        B_logprior = -(C - 0.006)**2/(2*0.003**2)
+
+        if C < 0.0005 or C > 0.3: return -np.inf
+        C_logprior = -(C - 0.004)**2/(2*0.003**2)
 
         alpha_sig = args.alpha_prior
-        frac_a_logprior = - (frac_A - 1) ** 2 / (2*alpha_sig**2)
+        alphaA_fac = 1
+        
+        if frac_A > 1: return -np.inf
+        frac_a_logprior = - (frac_A - 0.96) ** 2 / (2*(alphaA_fac*alpha_sig)**2)
 
         if frac_B > 1: return -np.inf
-        frac_b_logprior = - (frac_B - 1) ** 2 / (2*alpha_sig**2)
+        frac_b_logprior = - (frac_B - 0.99) ** 2 / (2*alpha_sig**2)
 
         if frac_C > 1: return -np.inf
-        frac_c_logprior = - (frac_C - 1) ** 2 / (2*alpha_sig**2)
+        frac_c_logprior = - (frac_C - 0.99) ** 2 / (2*alpha_sig**2)
+        if abs(center_offset)>1: return -np.inf        
+        log_center_offset_prior =  -(center_offset-0.1)**2/(2*args.fit_peakcenter_offset**2)
 
-        return temp_logprior + C_logprior + A_logprior + frac_a_logprior + frac_b_logprior + frac_c_logprior + lorentz_width_prior
+        return temp_logprior + A_logprior + B_logprior + C_logprior + frac_a_logprior + frac_b_logprior + frac_c_logprior + lorentz_width_prior + log_center_offset_prior
 
 if args.symmetry_group == 'Cs':
     log_prior = log_prior_Cs
@@ -835,24 +855,24 @@ def model_log_likelihood_Cs(params, data_wavelength, data_flux, data_flux_dT, no
 
     try:
         if args.B_not_equal_C:
-            T, A, B, C, frac_A, frac_B, frac_C, lorentz_width = params
+            T, A, B, C, frac_A, frac_B, frac_C, lorentz_width, center_offset = params
         else:
-            T, A, C, frac_A, frac_C, lorentz_width = params
+            T, A, C, frac_A, frac_C, lorentz_width, center_offset = params
             B = C
             frac_B = frac_C
         
-        spec_txt_b, base_b = generate_pgopher_input(T, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='a')
-        _, model_flux_b = convolve_pgopher_spectrum(spec_txt_b, central_wav)
+        spec_txt_b, base_b = generate_pgopher_input(T, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='a', center_invcm_offset=center_offset)
+        _, model_flux_b = convolve_pgopher_spectrum(spec_txt_b, central_wav, center_invcm_offset=center_offset)
 
-        spec_txt_c, base_c = generate_pgopher_input(T, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='b')
-        _, model_flux_c = convolve_pgopher_spectrum(spec_txt_c, central_wav)
+        spec_txt_c, base_c = generate_pgopher_input(T, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='b', center_invcm_offset=center_offset)
+        _, model_flux_c = convolve_pgopher_spectrum(spec_txt_c, central_wav, center_invcm_offset=center_offset)
 
         if args.fit_dT:
-            spec_txt_dT_b, base_dT_b = generate_pgopher_input(T + 0.05, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='a')
-            _, model_flux_dT_b = convolve_pgopher_spectrum(spec_txt_dT_b, central_wav)
+            spec_txt_dT_b, base_dT_b = generate_pgopher_input(T + 0.05, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='a', center_invcm_offset=center_offset)
+            _, model_flux_dT_b = convolve_pgopher_spectrum(spec_txt_dT_b, central_wav, center_invcm_offset=center_offset)
 
-            spec_txt_dT_c, base_dT_c = generate_pgopher_input(T + 0.05, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='b')
-            _, model_flux_dT_c = convolve_pgopher_spectrum(spec_txt_dT_c, central_wav)
+            spec_txt_dT_c, base_dT_c = generate_pgopher_input(T + 0.05, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='b', center_invcm_offset=center_offset)
+            _, model_flux_dT_c = convolve_pgopher_spectrum(spec_txt_dT_c, central_wav, center_invcm_offset=center_offset)
         else:
             model_flux_dT_b = np.zeros_like(data_flux)
             model_flux_dT_c = np.zeros_like(data_flux)
@@ -974,18 +994,21 @@ def model_log_likelihood_C2v(params, data_wavelength, data_flux, data_flux_dT, n
 
     try:
         if args.B_not_equal_C:
-            T, A, B, C, frac_A, frac_B, frac_C, lorentz_width = params
+            T, A, B, C, frac_A, frac_B, frac_C, lorentz_width, center_offset = params
         else:
-            T, A, C, frac_A, frac_C, lorentz_width = params
+            T, A, C, frac_A, frac_C, lorentz_width, center_offset = params
             B = A
             frac_B = frac_A
         
-        spec_txt, base = generate_pgopher_input(T, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='a')
-        _, model_flux_b = convolve_pgopher_spectrum(spec_txt, central_wav)
+        spec_txt, base = generate_pgopher_input(T, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='a', center_invcm_offset=center_offset)
+        _, model_flux_b = interpolate_pgopher_spectrum(spec_txt)
+        # _, model_flux_b = convolve_pgopher_spectrum(spec_txt, central_wav, center_invcm_offset=center_offset)
 
         if args.fit_dT:
-            spec_txt_dT, base_dT = generate_pgopher_input(T + 0.05, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='a')
-            _, model_flux_dT = convolve_pgopher_spectrum(spec_txt_dT, central_wav)
+            spec_txt_dT, base_dT = generate_pgopher_input(T + 0.05, A, B, C, frac_A, frac_B, frac_C, lorentz_width, axis='a', center_invcm_offset=center_offset)
+            _, model_flux_dT = interpolate_pgopher_spectrum(spec_txt_dT)
+            # _, model_flux_dT = convolve_pgopher_spectrum(spec_txt_dT, central_wav, center_invcm_offset=center_offset)
+
         else:
             model_flux_dT = np.zeros_like(data_flux)
 
@@ -1030,24 +1053,24 @@ for file in Path(TEMP_DIR).iterdir():
         file.unlink()
 
 if args.B_not_equal_C:
-    ndim = 8
+    ndim = 9
     if args.symmetry_group == 'Cs':
-        p0_center = [20, 0.02, 0.004, 0.003, 0.999, 0.999, 0.999, 0.1] # T, A, B, C, frac_A, frac_B, frac_C, lorentz
-        step_scales = [15, 0.005, 0.0015, 0.0015, 0.001, 0.001, 0.001, 0.05]
+        p0_center = [7, 0.02, 0.004, 0.003, 0.999, 0.999, 0.999, 0.1, 0.0] # T, A, B, C, frac_A, frac_B, frac_C, lorentz, offset
+        step_scales = [15, 0.005, 0.0015, 0.0015, 0.001, 0.001, 0.001, 0.05, 0.05]
         # step_scales = [0.1, 0.000005, 0.0000015, 0.0000015, 0.000001, 0.000001, 0.000001]
 
     if args.symmetry_group == 'C2v':
-        p0_center = [20, 0.003, 0.004, 0.02, 0.999, 0.999, 0.999, 0.1] # T, A, B, C, frac_A, frac_B, frac_C, lorentz
-        step_scales = [15, 0.0015, 0.0015, 0.005, 0.001, 0.001, 0.001, 0.05]
+        p0_center =   [7, 0.08, 0.006, 0.004, 0.96, 0.99, 0.99, 0.3, 0.0] # T, A, B, C, frac_A, frac_B, frac_C, lorentz, offset
+        step_scales = [10, 0.01, 0.0015, 0.001, 0.002, 0.001, 0.001, 0.05, 0.05]
         # step_scales = [0.1, 0.000005, 0.0000015, 0.0000015, 0.000001, 0.000001, 0.000001]
 else:
-    ndim = 6
+    ndim = 7
     if args.symmetry_group == 'Cs':
-        p0_center = [20, 0.02, 0.003, 0.99, 0.95, 0.1]  # T, A, BC, frac_AB, frac_C
-        step_scales = [15, 0.005, 0.0015, 0.001, 0.001, 0.05]
+        p0_center = [20, 0.02, 0.003, 0.99, 0.95, 0.1, 0.0]  # T, A, BC, frac_AB, frac_C, offset
+        step_scales = [15, 0.005, 0.0015, 0.001, 0.001, 0.05, 0.05]
     if args.symmetry_group == 'C2v': ## pay attention to how the nomenclature changes!
-        p0_center = [20, 0.003, 0.02, 0.99, 0.99, 0.1]  # T, AB, C, frac_AB, frac_C
-        step_scales = [15, 0.0015, 0.005, 0.001, 0.001, 0.05]
+        p0_center =   [7, 0.08, 0.04, 0.96, 0.99, 0.1, 0.0]  # T, AB, C, frac_AB, frac_C, offset
+        step_scales = [15, 0.005, 0.0015, 0.002, 0.001, 0.05, 0.05]
     
 
 nsteps = args.nsteps
@@ -1057,17 +1080,17 @@ print(f"Using {ncpu_to_use} CPUs")
 
 fudge = float(args.fudge) #how much to inflate errors that we may not believe in
 
-DIB_15272 = h5py.File(osp.expanduser('~/DIB/new_errs/res_dib_15272.h5'), "r")
-data_wavelength = DIB_15272['wav'][:]
-data_flux = DIB_15272['mean'][:][:,0]
-data_flux_dT = DIB_15272['mean'][:][:,1]
+DIB_15672 = h5py.File(osp.expanduser('~/DIB/new_errs/res_dib_15672.h5'), "r")
+data_wavelength = DIB_15672['wav'][:]
+data_flux = DIB_15672['mean'][:][:,0]
+data_flux_dT = DIB_15672['mean'][:][:,1]
 
-noise_std = fudge*np.sqrt(DIB_15272['var'][:][:,0])
-noise_std_dT = fudge*np.sqrt(DIB_15272['var'][:][:,1])
+noise_std = fudge*np.sqrt(DIB_15672['var'][:][:,0])
+noise_std_dT = fudge*np.sqrt(DIB_15672['var'][:][:,1])
 
 if args.use_direct:
-    data_flux = DIB_15272['mean'][:][:,0]
-    data_flux_dT = DIB_15272['mean'][:][:,1]
+    data_flux = DIB_15672['mean'][:][:,0]
+    data_flux_dT = DIB_15672['mean'][:][:,1]
     if args.old_errs:
         errs0 = h5py.File(osp.expanduser('~/DIB/jackknife_dib.h5'), "r")
         measurements = pd.read_csv(osp.expanduser('~/DIB/pca_version.txt'), sep='\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
@@ -1081,7 +1104,7 @@ if args.use_direct:
             noise_std = fudge * np.sqrt(errs0['var'][:, 0])
             noise_std_dT = np.sqrt(errs0['var'][:, 1])
     if args.plate_errs:
-        errs0 = h5py.File(osp.expanduser('~/DIB/new_errs/jackknife_plates_dib_15272.h5'), "r")
+        errs0 = h5py.File(osp.expanduser('~/DIB/new_errs/jackknife_plates_dib_15672.h5'), "r")
         data_flux = errs0['mean'][:,0]
         data_flux_dT = errs0['mean'][:,1]
         if args.cov:
@@ -1108,8 +1131,8 @@ else:
         print(data_flux_dT.shape)
 
 if args.emphasize_dT_center:
-    width = 7
-    emphasize_fac = 3
+    width = 12
+    emphasize_fac = 5
     center_idx = len(noise_std_dT)//2
     noise_std_dT[center_idx-width:center_idx+width]/=emphasize_fac
 
@@ -1124,7 +1147,10 @@ if args.balance_errs:
 
     noise_std *= dT_rel_err/peak_rel_err
 
-backend_file = osp.expanduser(f"~/../../scratch/gpfs/cj1223/DIB/bc_run_{TEMP_SUFFIX}.h5")
+    noise_std/=2
+    noise_std_dT/=2
+
+backend_file = osp.expanduser(f"~/../../scratch/gpfs/cj1223/DIB/15672_run_{TEMP_SUFFIX}.h5")
 if osp.exists(backend_file):
     os.remove(backend_file)  # Ensure clean start
 
@@ -1147,14 +1173,15 @@ with get_context("fork").Pool(processes=ncpu_to_use) as pool:
     f"- Fitting main spectrum: {args.fit_spec}\n"
     f"- Fitting temperature derivative: {args.fit_dT}\n"
     f"- Using {args.symmetry_group} symmetry\n"
-    f"- Using {args.tau_prior} inverse cm as a prior slope on the exponential prior on Lorentzian broadening\n"
+    f"- Using {args.tau_prior} inverse cm as a gaussian prior width on the gaussian prior on Lorentzian broadening\n"
     f"- Using {args.alpha_prior} gaussian prior width for the vibrational stretch (alpha) in the rotational constants\n"
     f"- {errtext}\n"
     f"- Truncating the spectral fitting by {args.extra_truncation} extra wavelength elements\n"
-    f"- {'Fitting a/b ratio with a prior' if args.use_scalar_prior else 'Doing joint, exact, a/b fits'}\n"
+    f"- {'Fitting a/b ratio with a prior if Cs' if args.use_scalar_prior else 'Doing joint, exact, a/b fits if Cs'}\n"
     f"- {'Doing non-linear scalar fits' if args.nonlinear_fit else 'Doing linear scalar fits'}\n"
-    f"- {'Reducing errors in the center of dT profile' if args.emphasize_dT_center else ''}\n"
-    f"- {'Balancing errors between DIB profile and delta-T profile' if args.balance_errs else ''}\n" ) 
+    f"- {'Reducing errors in the center of dT profile' if args.emphasize_dT_center else 'Not emphasizing center'}\n"
+    f"- {'Balancing errors between DIB profile and delta-T profile' if args.balance_errs else 'Keeping original errors'}\n"
+    f"- {f'Letting peak center offset vary with a Gaussian prior with width {args.fit_peakcenter_offset} inv cm' if type(args.fit_peakcenter_offset)==float else ''}\n" ) 
 
     if args.symmetry_group == 'Cs':
         sampler = emcee.EnsembleSampler(

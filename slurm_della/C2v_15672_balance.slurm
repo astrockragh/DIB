@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=15672_direct  # create a short name for your job
+#SBATCH --job-name=15672_balance  # create a short name for your job
 #SBATCH --nodes=1                # node count
 #SBATCH --account=spergel           # account
 #SBATCH --cpus-per-task=64        # cpu-cores per task (>1 if multi-threaded tasks)

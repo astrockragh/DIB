@@ -11,7 +11,7 @@
       </AsymmetricManifold>
       <AsymmetricManifold Name="Excited" Jmax="300">
         <AsymmetricTop Name="v=1">
-          <Parameter Name="Origin" Value="6547.6381"/>
+          <Parameter Name="Origin" Value="6380.81"/>
           <Parameter Name="A" Value="0.07" Float="true"/>
           <Parameter Name="B" Value="0.01" Float="true"/>
           <Parameter Name="C" Value="0.01" Float="true"/>

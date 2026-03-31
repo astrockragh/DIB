@@ -1,24 +1,28 @@
 <?xml version="1.0"?>
-<Mixture Version="PGOPHER 11.0.138 10 Dec 2020 18:41  64 bit (fpc 3.3.1 x86_64-Darwin)" nDF="5000" AllowComplex="True">
-  <Species Name="Species" Jmax="250">
-    <AsymmetricMolecule Name="AsymmetricTop" PointGroup="C2v" Jmax="250">
-      <AsymmetricManifold Name="Ground" Initial="True" Jmax="250">
+<Mixture NoLineList="True" Version="PGOPHER 11.0.138 10 Dec 2020 18:41  64 bit (fpc 3.3.1 x86_64-Darwin)" nDF="10000" AllowComplex="True">
+  <Parameter Name="RightScale" Float="true"/>
+  <Species Name="Species" Jmax="300">
+    <AsymmetricMolecule Name="AsymmetricTop" C2zAxis="c" PointGroup="Cs" C2xAxis="a" Jmax="300">
+      <AsymmetricManifold Name="Ground" Initial="True" Jmax="300">
         <AsymmetricTop Name="v=0">
-          <Parameter Name="A" Value="0.07" Float="true"/>
-          <Parameter Name="B" Value="0.01" Float="true"/>
-          <Parameter Name="C" Value="0.01" Float="true"/>
+          <Parameter Name="A" Value="0.0125"/>
+          <Parameter Name="B" Value="0.0023"/>
+          <Parameter Name="C" Value="0.00215"/>
         </AsymmetricTop>
       </AsymmetricManifold>
       <AsymmetricManifold Name="Excited" Jmax="300">
         <AsymmetricTop Name="v=1">
           <Parameter Name="Origin" Value="6380.81"/>
-          <Parameter Name="A" Value="0.07" Float="true"/>
-          <Parameter Name="B" Value="0.01" Float="true"/>
-          <Parameter Name="C" Value="0.01" Float="true"/>
+          <Parameter Name="A" Value="0.0125" Float="true" StdDev="0.00216768783531737"/>
+          <Parameter Name="B" Value="0.0023" StdDev="0.00216492931563296"/>
+          <Parameter Name="C" Value="0.00214" StdDev="0.00691548509272373"/>
+          <Parameter Name="BDelta" Float="true"/>
         </AsymmetricTop>
       </AsymmetricManifold>
       <TransitionMoments Bra="Excited" Ket="Ground">
-        <CartesianTransitionMoment Bra="v=1" Ket="v=0"/>
+        <CartesianTransitionMoment Axis="a" Bra="v=1" Ket="v=0">
+          <Parameter Name="Strength" Float="true"/>
+        </CartesianTransitionMoment>
       </TransitionMoments>
     </AsymmetricMolecule>
   </Species>
@@ -45,12 +49,12 @@
     <Correlation Row="Species.AsymmetricTop.Excited.v=1.C" Col="Species.AsymmetricTop.Excited.v=1.A" Value="0.939441256399517"/>
     <Correlation Row="Species.AsymmetricTop.Excited.v=1.C" Col="Species.AsymmetricTop.Excited.v=1.B" Value="0.931431854205903"/>
   </Correlations>
-  <Parameter Name="Gaussian" Value="0.3"/>
+  <Parameter Name="Gaussian" Value="0.01"/>
   <Parameter Name="Lorentzian" Value="0.001"/>
+  <Parameter Name="OThreshold" Value="1E-20"/>
   <Parameter Name="SMargin" Value="-0.960498"/>
-  <Parameter Name="Temperature" Value="20"/>
-  <Parameter Name="Fmin" Value="6375.0"/>
-  <Parameter Name="Fmax" Value="6387.0"/>
-  <FormSettings Name="ConstantsWindow" ActiveObject="Simulation: Simulation"/>
-  <FormSettings Name="LogWindow" FitType="Contour"/>
+  <Parameter Name="Temperature" Value="10"/>
+  <Parameter Name="Fmin" Value="6544.6395514428"/>
+  <Parameter Name="Fmax" Value="6550.5"/>
+  <FormSettings Name="ConstantsWindow" ActiveObject="CartesianTransitionMoment: Species - AsymmetricTop - &lt;Excited|mu|Ground&gt; - &lt;v=1|a|v=0&gt;"/>
 </Mixture>

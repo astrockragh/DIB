@@ -1065,7 +1065,7 @@ if args.B_not_equal_C:
         # step_scales = [0.1, 0.000005, 0.0000015, 0.0000015, 0.000001, 0.000001, 0.000001]
 else:
     ndim = 7
-    if args.symmetry_group == 'Cs'å:
+    if args.symmetry_group == 'Cs':
         p0_center = [20, 0.02, 0.003, 0.99, 0.95, 0.1, 0.0]  # T, A, BC, frac_AB, frac_C, offset
         step_scales = [15, 0.005, 0.0015, 0.001, 0.001, 0.05, 0.05]
     if args.symmetry_group == 'C2v': ## pay attention to how the nomenclature changes!

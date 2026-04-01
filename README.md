@@ -55,8 +55,7 @@ Posterior distributions are sampled with the affine-invariant ensemble sampler `
 - **First simultaneous Bayesian constraints on all three principal rotational constants** (A, B, C) and excitation temperature T for two NIR DIB carriers, enabled by the joint fit to the profile and its R(V)-response function.
 - The 15,273 Å carrier is consistent with a **planar polycyclic aromatic hydrocarbon (PAH)** geometry; the moment-of-inertia ratios place it among fused-ring structures containing tens of carbon atoms.
 - The 15,672 Å carrier occupies a **distinct region of molecular geometry space**, demonstrating that the two strongest NIR DIBs arise from chemically different species.
-- Rotational excitation temperatures of order **T ≈ 22 K**, consistent with diffuse ISM thermal conditions and independent estimates from C₂ rotational populations.
-- The implied **dT/dR(V) ≈ 27.8 K per unit R(V)**, quantifying for the first time the environmental temperature sensitivity of a DIB carrier.
+- Rotational excitation temperatures of order **T ≈ XX-XX K**, colder than we expected.
 - The inferred grain sizes and rotation rates are **compatible with the spinning-dust mechanism** responsible for Anomalous Microwave Emission (AME), connecting the DIB carriers to one of the other major open problems in interstellar medium physics.
 
 ---

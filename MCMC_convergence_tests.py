@@ -216,7 +216,8 @@ def make_summary_figure(flat_samples, chain, filename,
                     label=r"Convergence criterion (N = 50$\tau$)")
         ax_tau.set_xlabel("Iteration", fontsize=12)
         ax_tau.set_ylabel(r"$\tau$", fontsize=12)
-        ax_tau.set_ylim(2, np.max(max_taus) * 1.05)
+        if not np.any(np.isnan(max_taus)) and not np.any(np.isinf(max_taus)):
+            ax_tau.set_ylim(2, np.nanmax(max_taus) * 1.05)
         ax_tau.tick_params(labelsize=12)
         ax_tau.legend(fontsize=12)
 

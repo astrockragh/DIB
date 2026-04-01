@@ -182,7 +182,7 @@ if args.symmetry_group == 'C2v':
 else:
     PGO_TEMPLATE = osp.expanduser("~/DIB/pgo_files/asym_top_15272_Cs.pgo")  # fallback for Cs (not used directly)
 
-TEMP_DIR = osp.expanduser(f"~/../../scratch/gpfs/cj1223/DIB/pgo_temppy_{TEMP_SUFFIX}")
+TEMP_DIR = osp.expanduser(f"~/../../scratch/gpfs/MELCHIOR/cj1223/DIB/pgo_temppy_{TEMP_SUFFIX}")
 
 os.makedirs(TEMP_DIR, exist_ok=True)
 shutil.rmtree(TEMP_DIR, ignore_errors=False, onerror=None)
@@ -1395,7 +1395,7 @@ if args.err_factor != 1.0:
     noise_std /= args.err_factor
     noise_std_dT /= args.err_factor
 
-backend_file = osp.expanduser(f"~/../../scratch/gpfs/cj1223/DIB/{args.dib}_run_{TEMP_SUFFIX}.h5")
+backend_file = osp.expanduser(f"~/../../scratch/gpfs/MELCHIOR/cj1223/DIB/{args.dib}_run_{TEMP_SUFFIX}.h5")
 if osp.exists(backend_file):
     os.remove(backend_file)  # Ensure clean start
 
@@ -1452,7 +1452,7 @@ with get_context("fork").Pool(processes=ncpu_to_use) as pool:
         for _ in range(nwalkers)
     ])
 
-    DIAG_INTERVAL = 500
+    DIAG_INTERVAL = 20
     old_tau = np.inf * np.ones(ndim)
     tau_history = []
     iter_history = []

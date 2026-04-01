@@ -1,5 +1,8 @@
 from multiprocessing import get_context
 import subprocess, os, emcee, time, shutil, h5py, argparse
+from MCMC_convergence_tests import (detect_multimodal, ks_stability_test,
+                                     compute_rhat, format_diagnostics,
+                                     make_summary_figure)
 from scipy.ndimage import gaussian_filter
 import numpy as np
 import pandas as pd
@@ -1272,6 +1275,13 @@ for file in Path(TEMP_DIR).iterdir():
 use_center_offset = isinstance(args.fit_peakcenter_offset, float)
 
 if args.B_not_equal_C:
+    param_labels = ["T", "A", "B", "C", "frac_A", "frac_B", "frac_C", "lorentz_width"]
+else:
+    param_labels = ["T", "A", "C", "frac_A", "frac_C", "lorentz_width"]
+if use_center_offset:
+    param_labels = param_labels + ["center_offset"]
+
+if args.B_not_equal_C:
     ndim = 8 + (1 if use_center_offset else 0)
     if args.symmetry_group == 'Cs':
         if args.dib == '15272':
@@ -1442,8 +1452,61 @@ with get_context("fork").Pool(processes=ncpu_to_use) as pool:
         for _ in range(nwalkers)
     ])
 
+    DIAG_INTERVAL = 500
+    old_tau = np.inf * np.ones(ndim)
+    tau_history = []
+    iter_history = []
+
     startm = time.time()
-    sampler.run_mcmc(p0, nsteps, progress=True)
+    for sample in sampler.sample(p0, iterations=nsteps, progress=True):
+        if sampler.iteration % DIAG_INTERVAL != 0:
+            continue
+
+        chain = sampler.get_chain()
+        n = chain.shape[0]
+
+        try:
+            tau = sampler.get_autocorr_time(tol=0)
+        except Exception:
+            continue
+
+        tau_history.append(tau.copy())
+        iter_history.append(n)
+
+        ess = n / tau
+        af = sampler.acceptance_fraction
+        var = np.var(chain[-100:], axis=0)
+        stuck = (af < 0.025) | (var.mean(axis=1) < 1e-5)
+
+        flat = sampler.get_chain(discard=max(0, n // 2), flat=True)
+        multimodal_peaks = np.array([detect_multimodal(flat[:, i]) for i in range(ndim)])
+        ks_chunks, ks_tail = ks_stability_test(chain, flat, tau=200)
+        rhat = compute_rhat(chain)
+
+        diag_str = format_diagnostics(
+            n, tau, old_tau, ess, af, stuck,
+            multimodal_peaks, ks_chunks, ks_tail, rhat,
+            labels=param_labels
+        )
+        print(diag_str)
+
+        with h5py.File(backend_file, "a") as f:
+            grp = f.require_group(f"figures_{n}")
+            if "diagnostics" in grp:
+                del grp["diagnostics"]
+            grp.create_dataset("diagnostics", data=np.bytes_(diag_str.encode("utf-8")))
+
+        make_summary_figure(
+            flat, chain, backend_file,
+            labels=param_labels,
+            iter_hist=iter_history,
+            tau_hist=tau_history,
+            ks_chunks=ks_chunks,
+            ks_tail=ks_tail,
+        )
+
+        old_tau = tau.copy()
+
     end = time.time()
     print(f"Multiprocessing took {end - startm:.1f} seconds")
 

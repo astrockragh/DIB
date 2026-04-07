@@ -49,12 +49,12 @@
     <Correlation Row="Species.AsymmetricTop.Excited.v=1.C" Col="Species.AsymmetricTop.Excited.v=1.A" Value="0.939441256399517"/>
     <Correlation Row="Species.AsymmetricTop.Excited.v=1.C" Col="Species.AsymmetricTop.Excited.v=1.B" Value="0.931431854205903"/>
   </Correlations>
-  <Parameter Name="Gaussian" Value="0.01"/>
+  <Parameter Name="Gaussian" Value="0.3"/>
   <Parameter Name="Lorentzian" Value="0.001"/>
   <Parameter Name="OThreshold" Value="1E-20"/>
   <Parameter Name="SMargin" Value="-0.960498"/>
   <Parameter Name="Temperature" Value="10"/>
-  <Parameter Name="Fmin" Value="6544.6395514428"/>
-  <Parameter Name="Fmax" Value="6550.5"/>
+  <Parameter Name="Fmin" Value="6375.0"/>
+  <Parameter Name="Fmax" Value="6387.0"/>
   <FormSettings Name="ConstantsWindow" ActiveObject="CartesianTransitionMoment: Species - AsymmetricTop - &lt;Excited|mu|Ground&gt; - &lt;v=1|b|v=0&gt;"/>
 </Mixture>

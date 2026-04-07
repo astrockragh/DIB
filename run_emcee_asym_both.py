@@ -1334,8 +1334,6 @@ noise_std = fudge*np.sqrt(DIB_file['var'][:][:,0])
 noise_std_dT = fudge*np.sqrt(DIB_file['var'][:][:,1])
 
 if args.use_direct:
-    data_flux = DIB_file['mean'][:][:,0]
-    data_flux_dT = DIB_file['mean'][:][:,1]
     if args.old_errs:
         errs0 = h5py.File(osp.expanduser('~/DIB/jackknife_dib.h5'), "r")
         measurements = pd.read_csv(osp.expanduser('~/DIB/pca_version.txt'), sep='\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
@@ -1362,6 +1360,7 @@ if args.use_direct:
 else:
     errs0 = h5py.File(osp.expanduser('~/DIB/jackknife_dib.h5'), "r")
     measurements = pd.read_csv(osp.expanduser('~/DIB/pca_version.txt'), sep='\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
+    ## overwrite data_flux and data_flux_dT with the PCA versions
     data_flux = measurements['PC1_1'].values
     data_flux_dT = measurements['PC2_2'].values
     if args.cov:

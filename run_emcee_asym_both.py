@@ -166,13 +166,13 @@ TEMP_SUFFIX = f"DIB{args.dib}_Symmetry{val_to_str(args.symmetry_group)}_BC{val_t
 if args.dib == '15272':
     CENTRAL_INVCM_BASE = 1e8 / 15272.27178113337  # ~6544.44
     LSF_FILE = osp.expanduser('~/DIB/LSFs/lsf_15272.h5')
-    DATA_FILE = osp.expanduser('~/DIB/new_errs/res_dib_15272.h5')
-    PLATE_ERR_FILE = osp.expanduser('~/DIB/new_errs/jackknife_plates_dib_15272.h5')
+    DATA_FILE = osp.expanduser('~/DIB/all_errs/res_dib_15272.h5')
+    PLATE_ERR_FILE = osp.expanduser('~/DIB/all_errs/jackknife_plates_dib_15272.h5')
 else:  # 15672
     CENTRAL_INVCM_BASE = 6381.0
     LSF_FILE = osp.expanduser('~/DIB/LSFs/lsf_15672.h5')
-    DATA_FILE = osp.expanduser('~/DIB/new_errs/res_dib_15672.h5')
-    PLATE_ERR_FILE = osp.expanduser('~/DIB/new_errs/jackknife_plates_dib_15672.h5')
+    DATA_FILE = osp.expanduser('~/DIB/all_errs/res_dib_15672.h5')
+    PLATE_ERR_FILE = osp.expanduser('~/DIB/all_errs/jackknife_plates_dib_15672.h5')
 
 if args.symmetry_group == 'C2v':
     if args.dib == '15272':
@@ -346,8 +346,8 @@ def get_pgopher_spectrum(spectrum_file, center_invcm_offset=0.0, dlam=0.01, wind
         with h5py.File(LSF_FILE, 'r') as f:
             wav_load = f['wav'][:]
     else:
-        measurements = pd.read_csv(osp.expanduser('~/DIB/pca_version.txt'), sep='\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
-        wav_load = measurements['wavelength'].values
+        measurements_PCA = pd.read_csv(osp.expanduser('~/DIB/all_errs/pca_version.txt'), sep='\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
+        wav_load = measurements_PCA['wavelength'].values
 
     do_convolve = not (args.dib == '15672' and args.symmetry_group == 'C2v')
 
@@ -1335,9 +1335,9 @@ noise_std_dT = fudge*np.sqrt(DIB_file['var'][:][:,1])
 
 if args.use_direct:
     if args.old_errs:
-        errs0 = h5py.File(osp.expanduser('~/DIB/jackknife_dib.h5'), "r")
-        measurements = pd.read_csv(osp.expanduser('~/DIB/pca_version.txt'), sep='\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
-        data_wavelength = measurements['wavelength']
+        errs0 = h5py.File(osp.expanduser('~/DIB/all_errs/jackknife_dib.h5'), "r")
+        measurements_PCA = pd.read_csv(osp.expanduser('~/DIB/all_errs/pca_version.txt'), sep='\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
+        data_wavelength = measurements_PCA['wavelength']
         data_flux = errs0['mean'][0,:,0]
         data_flux_dT = errs0['mean'][0,:,1]
         if args.cov:
@@ -1358,11 +1358,11 @@ if args.use_direct:
             noise_std_dT = np.sqrt(errs0['var'][:, 1])
 
 else:
-    errs0 = h5py.File(osp.expanduser('~/DIB/jackknife_dib.h5'), "r")
-    measurements = pd.read_csv(osp.expanduser('~/DIB/pca_version.txt'), sep='\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
+    errs0 = h5py.File(osp.expanduser('~/DIB/all_errs/jackknife_dib.h5'), "r")
+    measurements_PCA = pd.read_csv(osp.expanduser('~/DIB/all_errs/pca_version.txt'), sep='\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
     ## overwrite data_flux and data_flux_dT with the PCA versions
-    data_flux = measurements['PC1_1'].values
-    data_flux_dT = measurements['PC2_2'].values
+    data_flux = measurements_PCA['PC1_1'].values
+    data_flux_dT = measurements_PCA['PC2_2'].values
     if args.cov:
         noise_std = errs0['cov'][:, :, 0]
         noise_std_dT = errs0['cov'][:, :, 1]

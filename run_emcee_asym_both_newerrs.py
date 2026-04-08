@@ -13,11 +13,11 @@ from scipy.signal import convolve
 from scipy.interpolate import interp1d
 
 crops = {
-    'old':         {'15272': 34, '15672': 39},
-    'plate':       {'15272': 10, '15672': 15},
-    'default':     {'15272': 10, '15672': 15},
-    'pca':         {'15272': 10, '15672': 15},
-    'pca_default': {'15272': 10, '15672': 15}}
+    'old':         {'15272': 39, '15672': 44},
+    'plate':       {'15272': 15, '15672': 15},
+    'default':     {'15272': 15, '15672': 15},
+    'pca':         {'15272': 15, '15672': 15},
+    'pca_default': {'15272': 15, '15672': 15}}
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run emcee for asymmetric top spectra fitting")
@@ -171,6 +171,12 @@ elif args.plate_errs:
 else:
     err_model = 'pca_default'
 
+errType = 'Default'
+if args.old_errs:
+    errType = 'Old'
+if args.plate_errs:
+    errType = 'Plate'
+
 # Compose TEMP_SUFFIX and TEMP_DIR depending on all args
 def val_to_str(v):
     if isinstance(v, bool):
@@ -179,9 +185,14 @@ def val_to_str(v):
         return str(v).replace('.', 'p')
     return str(v)
 
-TEMP_SUFFIX = f"DIB{args.dib}_Symmetry{val_to_str(args.symmetry_group)}_BC{val_to_str(args.B_not_equal_C)}_F{val_to_str(args.fudge)}_" + \
+def list_to_str(v):
+    if v is None:
+        return 'None'
+    return '[' + ','.join(val_to_str(x) for x in v) + ']'
+
+TEMP_SUFFIX = f"DIB{args.dib}_Symmetry{val_to_str(args.symmetry_group)}_BC{val_to_str(args.B_not_equal_C)}_F{val_to_str(args.fudge)}_D{val_to_str(args.use_direct)}_" + \
               f"Flat{val_to_str(args.flat_prior)}_Spec{val_to_str(args.fit_spec)}_dT{val_to_str(args.fit_dT)}_cov{val_to_str(args.cov)}_nonlin{val_to_str(args.nonlinear_fit)}" + \
-              f'_tauSlope{val_to_str(args.tau_prior)}_alphaSlope{val_to_str(args.alpha_prior)}_err{err_model}_trunc{args.extra_truncation}_balanceErr{args.balance_errs}_dTcenter{args.emphasize_dT_center}_centeroffset{val_to_str(args.fit_peakcenter_offset)}_{args.title}'
+              f'_tauSlope{val_to_str(args.tau_prior)}_alphaSlope{val_to_str(args.alpha_prior)}_err{errType}_trunc{args.extra_truncation}_balanceErr{args.balance_errs}_dTcenter{list_to_str(args.emphasize_dT_center)}_centeroffset{val_to_str(args.fit_peakcenter_offset)}_{args.title}'
 
 # DIB-specific constants (set after parsing args)
 if args.dib == '15272':
@@ -1501,7 +1512,7 @@ with get_context("fork").Pool(processes=ncpu_to_use) as pool:
         for _ in range(nwalkers)
     ])
 
-    DIAG_INTERVAL = 20
+    DIAG_INTERVAL = 100
     old_tau = np.inf * np.ones(ndim)
     tau_history = []
     iter_history = []

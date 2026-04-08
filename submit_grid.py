@@ -94,7 +94,7 @@ BASELINE = {
                                     # nominal rest wavelength; False disables the offset entirely
                                     # (overridden per DIB via DIB_OVERRIDES)
 
-    "title":                 "sweep",    # arbitrary string appended to the output directory name
+    "title":                 "sweep_Andrew",    # arbitrary string appended to the output directory name
                                     # for human-readable run labelling
 }
 
@@ -130,7 +130,8 @@ GRID = {
 
 # Which DIBs and symmetry groups to run
 # DIBS            = ["15272", "15672"]  # the two DIBs being fitted (rest wavelengths in Å)
-DIBS            = ["15672"]  # the two DIBs being fitted (rest wavelengths in Å)
+# DIBS            = ["15672"]  # the two DIBs being fitted (rest wavelengths in Å)
+DIBS            = ["15272"]  # the two DIBs being fitted (rest wavelengths in Å)
 SYMMETRY_GROUPS = ["Cs", "C2v"]      # molecular symmetry; controls which band types are active
 
 emphasize_dT_centers = {'15272': {

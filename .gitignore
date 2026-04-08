@@ -6,4 +6,4 @@ __pycache__
 *.h5
 slurm_new/*.out
 slurm_della/*.out
-slurm/*.out
+slurm/*.outnotebook_misc/molecule_space/*.ascii

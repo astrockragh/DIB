@@ -12,6 +12,8 @@ from scipy.signal import fftconvolve
 from scipy.signal import convolve
 from scipy.interpolate import interp1d
 
+REPO_ROOT = Path(__file__).resolve().parent
+
 crops = {
     'old':         {'15272': 39, '15672': 44},
     'plate':       {'15272': 15, '15672': 15},
@@ -197,22 +199,22 @@ TEMP_SUFFIX = f"DIB{args.dib}_Symmetry{val_to_str(args.symmetry_group)}_BC{val_t
 # DIB-specific constants (set after parsing args)
 if args.dib == '15272':
     CENTRAL_INVCM_BASE = 1e8 / 15272.27178113337  # ~6544.44
-    LSF_FILE = osp.expanduser('~/DIB/LSFs/lsf_15272.h5')
-    DATA_FILE = osp.expanduser('~/DIB/all_errs/res_dib_15272.h5')
-    PLATE_ERR_FILE = osp.expanduser('~/DIB/all_errs/jackknife_plates_dib_15272.h5')
+    LSF_FILE = str(REPO_ROOT / 'LSFs' / 'lsf_15272.h5')
+    DATA_FILE = str(REPO_ROOT / 'all_errs' / 'res_dib_15272.h5')
+    PLATE_ERR_FILE = str(REPO_ROOT / 'all_errs' / 'jackknife_plates_dib_15272.h5')
 else:  # 15672
     CENTRAL_INVCM_BASE = 6381.0
-    LSF_FILE = osp.expanduser('~/DIB/LSFs/lsf_15672.h5')
-    DATA_FILE = osp.expanduser('~/DIB/all_errs/res_dib_15672.h5')
-    PLATE_ERR_FILE = osp.expanduser('~/DIB/all_errs/jackknife_plates_dib_15672.h5')
+    LSF_FILE = str(REPO_ROOT / 'LSFs' / 'lsf_15672.h5')
+    DATA_FILE = str(REPO_ROOT / 'all_errs' / 'res_dib_15672.h5')
+    PLATE_ERR_FILE = str(REPO_ROOT / 'all_errs' / 'jackknife_plates_dib_15672.h5')
 
 if args.symmetry_group == 'C2v':
     if args.dib == '15272':
-        PGO_TEMPLATE = osp.expanduser("~/DIB/pgo_files/asym_top_15272_C2v.pgo")
+        PGO_TEMPLATE = str(REPO_ROOT / 'pgo_files' / 'asym_top_15272_C2v.pgo')
     else:
-        PGO_TEMPLATE = osp.expanduser("~/DIB/pgo_files/asym_top_15672_C2v_w_gauss.pgo")
+        PGO_TEMPLATE = str(REPO_ROOT / 'pgo_files' / 'asym_top_15672_C2v_w_gauss.pgo')
 else:
-    PGO_TEMPLATE = osp.expanduser("~/DIB/pgo_files/asym_top_15272_Cs.pgo")  # fallback for Cs (not used directly)
+    PGO_TEMPLATE = str(REPO_ROOT / 'pgo_files' / 'asym_top_15272_Cs.pgo')  # fallback for Cs (not used directly)
 
 TEMP_DIR = osp.expanduser(f"~/../../scratch/gpfs/MELCHIOR/cj1223/DIB/pgo_temppy_{TEMP_SUFFIX}")
 
@@ -232,14 +234,14 @@ def generate_pgopher_input_Cs(T, A_base, B_base, C_base, frac_A, frac_B, frac_C,
     spec_txt = os.path.join(TEMP_DIR, f"spec_{base}.txt")
     if args.dib == '15272':
         if axis == 'a':
-            PGO_TEMPLATE_CS = osp.expanduser("~/DIB/pgo_files/asym_top_15272_Cs_a.pgo")
+            PGO_TEMPLATE_CS = str(REPO_ROOT / 'pgo_files' / 'asym_top_15272_Cs_a.pgo')
         if axis == 'b':
-            PGO_TEMPLATE_CS = osp.expanduser("~/DIB/pgo_files/asym_top_15272_Cs_b.pgo")
+            PGO_TEMPLATE_CS = str(REPO_ROOT / 'pgo_files' / 'asym_top_15272_Cs_b.pgo')
     else:  # 15672
         if axis == 'a':
-            PGO_TEMPLATE_CS = osp.expanduser("~/DIB/pgo_files/asym_top_15672_Cs_a_w_gauss.pgo")
+            PGO_TEMPLATE_CS = str(REPO_ROOT / 'pgo_files' / 'asym_top_15672_Cs_a_w_gauss.pgo')
         if axis == 'b':
-            PGO_TEMPLATE_CS = osp.expanduser("~/DIB/pgo_files/asym_top_15672_Cs_b_w_gauss.pgo")
+            PGO_TEMPLATE_CS = str(REPO_ROOT / 'pgo_files' / 'asym_top_15672_Cs_b_w_gauss.pgo')
     awk_script = f'''
     awk -v temp="{T}" \\
         -v A_ground="{A_g}" -v B_ground="{B_g}" -v C_ground="{C_g}" \\
@@ -267,7 +269,7 @@ def generate_pgopher_input_Cs(T, A_base, B_base, C_base, frac_A, frac_B, frac_C,
     '''
 
     subprocess.run(awk_script, shell=True, check=True, executable="/bin/bash")
-    subprocess.run([osp.expanduser("~/DIB/./pgo"), "--plot", pgo_file, spec_txt], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run([str(REPO_ROOT / "pgo"), "--plot", pgo_file, spec_txt], check=True, stdout=subprocess.DEVNULL)
     return spec_txt, base
 
 def generate_pgopher_input_C2v(T, A_base, B_base, C_base, frac_A, frac_B, frac_C,
@@ -356,7 +358,7 @@ def generate_pgopher_input_C2v(T, A_base, B_base, C_base, frac_A, frac_B, frac_C
     '''
 
     subprocess.run(awk_script, shell=True, check=True, executable="/bin/bash")
-    subprocess.run([osp.expanduser("~/DIB/./pgo"), "--plot", pgo_file, spec_txt], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run([str(REPO_ROOT / "pgo"), "--plot", pgo_file, spec_txt], check=True, stdout=subprocess.DEVNULL)
     return spec_txt, base
 
 if args.symmetry_group == 'Cs':
@@ -379,11 +381,11 @@ def get_pgopher_spectrum(spectrum_file, center_invcm_offset=0.0, dlam=0.01, wind
             wav_load = f['wav'][:]
     elif err_model in ('pca', 'pca_default'):
         _pca_grid = pd.read_csv(
-            osp.expanduser(f'~/DIB/all_errs/pca_version_{args.dib}_narrow.txt'),
+            str(REPO_ROOT / 'all_errs' / f'pca_version_{args.dib}_narrow.txt'),
             sep=r'\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
         wav_load = _pca_grid['wavelength'].values
     else:  # 'old' — uses the original pca_version.txt grid (15272 only)
-        _pca_old = pd.read_csv(osp.expanduser('~/DIB/all_errs/pca_version.txt'),
+        _pca_old = pd.read_csv(str(REPO_ROOT / 'all_errs' / 'pca_version.txt'),
                                sep=r'\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
         wav_load = _pca_old['wavelength'].values
 
@@ -1361,7 +1363,7 @@ fudge = float(args.fudge)  # inflates noise_std (flux profile) only; err_factor 
 # ── Data loading — driven by err_model ────────────────────────────────────────
 if err_model == 'old':
     # Direct flux from old jackknife file (15272 only); wavelength from pca_version.txt
-    with h5py.File(osp.expanduser('~/DIB/all_errs/jackknife_dib.h5'), 'r') as errs0:
+    with h5py.File(str(REPO_ROOT / 'all_errs' / 'jackknife_dib.h5'), 'r') as errs0:
         data_flux    = np.array(errs0['mean'][0, :, 0])
         data_flux_dT = np.array(errs0['mean'][0, :, 1])
         if args.cov:
@@ -1370,7 +1372,7 @@ if err_model == 'old':
         else:
             noise_std    = fudge * np.sqrt(errs0['var'][:, 0])
             noise_std_dT =         np.sqrt(errs0['var'][:, 1])
-    _pca_old = pd.read_csv(osp.expanduser('~/DIB/all_errs/pca_version.txt'),
+    _pca_old = pd.read_csv(str(REPO_ROOT / 'all_errs' / 'pca_version.txt'),
                            sep=r'\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
     data_wavelength = _pca_old['wavelength'].values
 
@@ -1399,7 +1401,7 @@ elif err_model == 'default':
 
 elif err_model == 'pca':
     # PCA flux from narrow txt; errors from plate-jackknife file
-    _pca = pd.read_csv(osp.expanduser(f'~/DIB/all_errs/pca_version_{args.dib}_narrow.txt'),
+    _pca = pd.read_csv(str(REPO_ROOT / 'all_errs' / f'pca_version_{args.dib}_narrow.txt'),
                        sep=r'\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
     data_wavelength = _pca['wavelength'].values
     data_flux       = _pca['PC1_1'].values
@@ -1411,7 +1413,7 @@ elif err_model == 'pca':
 
 elif err_model == 'pca_default':
     # PCA flux from narrow txt; errors from res_dib file
-    _pca = pd.read_csv(osp.expanduser(f'~/DIB/all_errs/pca_version_{args.dib}_narrow.txt'),
+    _pca = pd.read_csv(str(REPO_ROOT / 'all_errs' / f'pca_version_{args.dib}_narrow.txt'),
                        sep=r'\s+', names=['wavelength', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2'])
     data_wavelength = _pca['wavelength'].values
     data_flux       = _pca['PC1_1'].values

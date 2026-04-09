@@ -1514,7 +1514,7 @@ with get_context("fork").Pool(processes=ncpu_to_use) as pool:
         for _ in range(nwalkers)
     ])
 
-    DIAG_INTERVAL = 100
+    DIAG_INTERVAL = 500
     old_tau = np.inf * np.ones(ndim)
     tau_history = []
     iter_history = []

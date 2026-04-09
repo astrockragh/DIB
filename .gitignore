@@ -4,7 +4,9 @@ temp_outputs
 .ipynb_checkpoints
 __pycache__
 *.h5
+!all_errs/**/*.h5
 slurm_new/*.out
 slurm_della/*.out
 slurm/*.out
+slurm_grid/*.out
 notebook_misc/molecule_space/*.ascii

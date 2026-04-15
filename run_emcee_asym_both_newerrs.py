@@ -26,7 +26,7 @@ def parse_args():
 
     parser.add_argument("-B_not_equal_C", "--B_not_equal_C",
                         type=lambda x: x.lower() in ['true', '1', 'yes'],
-                        default=False,
+                        default=True,
                         help="Allow B and C to be different (default: False)")
 
     parser.add_argument("-fudge", "--fudge",

@@ -37,7 +37,7 @@ module purge
 module load anaconda3/2022.5
 source activate torch-env"""
 
-PYTHON_SCRIPT = "../run_emcee_asym_both_newerrs.py"
+PYTHON_SCRIPT = "$HOME/DIB/run_emcee_asym_both_newerrs.py"
 
 # ── Baseline keyword values (applied to every job) ───────────────────────────
 # Every argument accepted by run_emcee_asym_both_newerrs.py must appear here
@@ -94,7 +94,7 @@ BASELINE = {
                                     # nominal rest wavelength; False disables the offset entirely
                                     # (overridden per DIB via DIB_OVERRIDES)
 
-    "title":                 "sweep_Andrew",    # arbitrary string appended to the output directory name
+    "title":                 "sweep",    # arbitrary string appended to the output directory name
                                     # for human-readable run labelling
 }
 
@@ -120,7 +120,7 @@ DIB_OVERRIDES = {
 GRID = {
     "tau_prior":     [0.05, 0.15],  # sweep soft vs. tight lifetime-broadening prior
     "plate_errs": [0, 1],         # 0 = do not use plate-jackknife errors; 1 = use smaller plate-jackknife errors 
-    # "balance_errs": [0, 1],         # 0 = do not balance errors; 1 = balance errors between profile and dT
+    "balance_errs": [0, 1],         # 0 = do not balance errors; 1 = balance errors between profile and dT
     # "use_direct": [0, 1],        # 0 = pca reconstruction; 1 = direct measurement (only relevant for dT, since profile is always direct)
     "extra_truncation": [0, 10],  # additional pixels to crop from each edge of the data beyond the model's default crop
     # "fit_dT": [0, 1],          # 0 = do not fit dT; 1 = include dT in the fit (only relevant for Cs, since dT is not available for C2v)
@@ -130,8 +130,8 @@ GRID = {
 
 # Which DIBs and symmetry groups to run
 # DIBS            = ["15272", "15672"]  # the two DIBs being fitted (rest wavelengths in Å)
-# DIBS            = ["15672"]  # the two DIBs being fitted (rest wavelengths in Å)
-DIBS            = ["15272"]  # the two DIBs being fitted (rest wavelengths in Å)
+DIBS            = ["15672"]  # the two DIBs being fitted (rest wavelengths in Å)
+# DIBS            = ["15272"]  # the two DIBs being fitted (rest wavelengths in Å)
 SYMMETRY_GROUPS = ["Cs", "C2v"]      # molecular symmetry; controls which band types are active
 
 emphasize_dT_centers = {'15272': {
@@ -248,7 +248,8 @@ def build_slurm(job_name, dib, sym, params, time_limit):
 
     python_block = (
         "\n".join(comment_lines) + "\n\n"
-        + f"python {PYTHON_SCRIPT} \\\n"
+        + f"SCRIPT={PYTHON_SCRIPT}\n\n"
+        + "python $SCRIPT \\\n"
         + " \\\n".join(arg_lines)
     )
 

@@ -48,7 +48,9 @@ BASELINE = {
 
     "fudge":                 1,     # multiplicative inflation of the DIB profile flux noise only
                                     # (1 = no inflation; higher = softer likelihood on the profile)
-
+    
+    "B_not_equal_C":         1,     # 0 = symmetric top (B=C); 1 = asymmetric top (B≠C)
+    
     "use_direct":            1,     # 1 = use directly measured profile/dT; 0 = use PCA reconstruction
 
     "old_errs":              0,     # 1 = use Andrew's original overly tight jackknife errors (jackknife_dib.h5)

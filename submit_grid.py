@@ -121,7 +121,7 @@ DIB_OVERRIDES = {
 # (DIB, symmetry_group) combination. Keys here override BASELINE for that run.
 GRID = {
     "tau_prior":     [0.05, 0.15],  # sweep soft vs. tight lifetime-broadening prior
-    "plate_errs": [0, 1],         # 0 = do not use plate-jackknife errors; 1 = use smaller plate-jackknife errors 
+    # "plate_errs": [0, 1],         # 0 = do not use plate-jackknife errors; 1 = use smaller plate-jackknife errors 
     "balance_errs": [0, 1],         # 0 = do not balance errors; 1 = balance errors between profile and dT
     # "use_direct": [0, 1],        # 0 = pca reconstruction; 1 = direct measurement (only relevant for dT, since profile is always direct)
     "extra_truncation": [0, 10],  # additional pixels to crop from each edge of the data beyond the model's default crop
@@ -132,8 +132,8 @@ GRID = {
 
 # Which DIBs and symmetry groups to run
 # DIBS            = ["15272", "15672"]  # the two DIBs being fitted (rest wavelengths in Å)
-DIBS            = ["15672"]  # the two DIBs being fitted (rest wavelengths in Å)
-# DIBS            = ["15272"]  # the two DIBs being fitted (rest wavelengths in Å)
+# DIBS            = ["15672"]  # the two DIBs being fitted (rest wavelengths in Å)
+DIBS            = ["15272"]  # the two DIBs being fitted (rest wavelengths in Å)
 SYMMETRY_GROUPS = ["Cs", "C2v"]      # molecular symmetry; controls which band types are active
 
 emphasize_dT_centers = {'15272': {

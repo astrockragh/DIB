@@ -10,3 +10,4 @@ slurm_della/*.out
 slurm/*.out
 slurm_grid/*.out
 notebook_misc/molecule_space/*.ascii
+make_PCA_plot.ipynb

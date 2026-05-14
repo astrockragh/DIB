@@ -12,4 +12,3 @@ slurm_grid/*.out
 notebook_misc/molecule_space/*.ascii
 make_PCA_plot.ipynb
 emcee_analysis_joint_with_geometry_plots_update_units.ipynb
-demo_data

@@ -57,7 +57,7 @@ print(f'PGOPHER temp dir: {TEMP_DIR}')
 
 # Output paths (relative to Hugo site root)
 
-ext = 'Cs_big'
+ext = f'{inferred_sym}_big'
 
 OUTPUT_DIR   = os.path.expanduser('~/DIB/demo_data/')
 OUTPUT_INDEX = os.path.join(OUTPUT_DIR, f'mol_spectra_index_{ext}.json')

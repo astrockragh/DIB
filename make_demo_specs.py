@@ -38,7 +38,7 @@ pgo_available = os.path.isfile(PGO_BINARY)
 if not pgo_available:
     raise RuntimeError('pgo binary not found at ' + PGO_BINARY)
 
-inferred_sym = 'Cs'        # 'C2v' or 'Cs'
+inferred_sym = 'C2v'        # 'C2v' or 'Cs'
 inferred_dib = '15272'
 
 # Wavelength grid (Angstroms) — shared x-axis for all spectra

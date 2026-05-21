@@ -604,8 +604,8 @@ def log_prior_Cs_15272(params):
         return 0.0
 
     if T <= 3 or T > 100: return -np.inf
-    mu = np.log(25)
-    sigma = 0.4
+    mu = np.log(10)
+    sigma = 0.25
     temp_logprior = -np.log(T * sigma * np.sqrt(2 * np.pi)) - ((np.log(T) - mu) ** 2) / (2 * sigma ** 2)
 
     if C < 0.0005 or C > 0.3: return -np.inf
@@ -660,8 +660,8 @@ def log_prior_Cs_15672(params):
         return 0.0
 
     if T <= 3 or T > 100: return -np.inf
-    mu = np.log(15)
-    sigma = 0.4
+    mu = np.log(10)
+    sigma = 0.25
     temp_logprior = -np.log(T * sigma * np.sqrt(2 * np.pi)) - ((np.log(T) - mu) ** 2) / (2 * sigma ** 2)
 
     if not (0.0 <= lorentz_width <= 1.0): return -np.inf
@@ -730,8 +730,8 @@ def log_prior_C2v_15272(params):
     else:
         if T <= 3 or T > 100: return -np.inf
         ## params for log-normal Temp prior
-        mu = np.log(25)
-        sigma = 0.4
+        mu = np.log(10)
+        sigma = 0.25
         temp_logprior = -np.log(T * sigma * np.sqrt(2 * np.pi)) - ((np.log(T) - mu) ** 2) / (2 * sigma ** 2)
 
         if C < 0.0005 or C > 0.3: return -np.inf
@@ -805,8 +805,8 @@ def log_prior_C2v_15672(params):
     else:
         if T <= 3 or T > 100: return -np.inf
         ## params for log-normal Temp prior
-        mu = np.log(15)
-        sigma = 0.4
+        mu = np.log(10)
+        sigma = 0.25
         temp_logprior = -np.log(T * sigma * np.sqrt(2 * np.pi)) - ((np.log(T) - mu) ** 2) / (2 * sigma ** 2)
 
         if not (0.0 <= lorentz_width <= 1.0): return -np.inf
@@ -963,6 +963,7 @@ def compute_loglikelihood_Cs(
     b_frac = c_frac = offset = 0
     b_frac_dT = c_frac_dT = offset_dT = 0
     base_frac_dT = 0
+    spec_integral = 0.0
     if args.use_scalar_prior:
         if args.fit_spec:
             # Apply Gaussian filter and crop edges
@@ -980,6 +981,11 @@ def compute_loglikelihood_Cs(
             fit = b_frac * spec_b + c_frac * spec_c + offset
             chi_spec = (measurement - fit) / noise
             chi2 += np.sum(chi_spec**2)
+            try:
+                spec_integral = float(np.trapz(spec_b + spec_c, data_wavelength[c:-c]))
+            except Exception as _e:
+                print(f"Warning: direct profile integral failed: {_e}")
+                spec_integral = 0.0
 
         if args.fit_dT:
             # Apply Gaussian filter and crop edges
@@ -1021,11 +1027,12 @@ def compute_loglikelihood_Cs(
 
         scalars = np.array([
         float(b_frac), float(c_frac), float(offset),
-        float(base_frac_dT), float(b_frac_dT), float(c_frac_dT), float(offset_dT)])
+        float(base_frac_dT), float(b_frac_dT), float(c_frac_dT), float(offset_dT),
+        float(spec_integral)])
     else:
         ## New as of August 4th, doing joint fit for the ratio between b- and c-type transitions
         ## I think that this has to be non-linear, so switching to scipy.optimize
-        scalars = np.zeros(6)  # default; overwritten by whichever fitting branch runs below
+        scalars = np.zeros(7)  # default; overwritten by whichever fitting branch runs below
 
         if args.fit_spec and not args.fit_dT:
             from scipy.optimize import least_squares
@@ -1045,10 +1052,15 @@ def compute_loglikelihood_Cs(
             fit = b_frac * spec_b + c_frac * spec_c + offset
             chi = (measurement - fit) / noise
             chi2 += np.sum(chi ** 2)
+            try:
+                spec_integral = float(np.trapz(spec_b + spec_c, data_wavelength[c:-c]))
+            except Exception as _e:
+                print(f"Warning: direct profile integral failed: {_e}")
+                spec_integral = 0.0
 
             scalars = np.array([
                 float(b_frac), float(c_frac), float(offset),
-                np.nan, np.nan, np.nan])
+                np.nan, np.nan, np.nan, float(spec_integral)])
 
 
         if not args.fit_spec and args.fit_dT:
@@ -1148,7 +1160,8 @@ def compute_loglikelihood_Cs(
             # Output scalar parameters
             scalars = np.array([
                 float(gamma), float(ratio_bc), float(offset_spec),
-                float(alpha_dT), float(beta_dT), float(offset_dT)
+                float(alpha_dT), float(beta_dT), float(offset_dT),
+                float(spec_integral)
             ])
 
         if args.fit_spec and args.fit_dT and args.nonlinear_fit:
@@ -1201,10 +1214,16 @@ def compute_loglikelihood_Cs(
             )
             chi2 += np.sum( ( (measurement_dT - fit_dT) / noise_dT )**2 )
             chi2 += np.sum( ( (measurement - fit) / noise )**2 )
+            try:
+                spec_integral = float(np.trapz(spec_b + spec_c, data_wavelength[c:-c]))
+            except Exception as _e:
+                print(f"Warning: direct profile integral failed: {_e}")
+                spec_integral = 0.0
 
             scalars = np.array([
             float(gamma), float(ratio_bc), float(offset_spec),
-            float(alpha_dT), float(beta_dT), float(offset_dT)])
+            float(alpha_dT), float(beta_dT), float(offset_dT),
+            float(spec_integral)])
 
         ## this is now a function that only does ratio_bc non-linearly
         elif args.fit_spec and args.fit_dT and not args.nonlinear_fit:
@@ -1316,10 +1335,17 @@ def compute_loglikelihood_Cs(
                 allf = np.vstack([fit, spec_b, spec_c, fit_dT, spec_dT_b, spec_dT_c])
                 np.savetxt(f'temp_outputs/fit_spec_{random_str}.csv', allf)
 
+            try:
+                spec_integral = float(np.trapz(spec_b + spec_c, data_wavelength[c:-c]))
+            except Exception as _e:
+                print(f"Warning: direct profile integral failed: {_e}")
+                spec_integral = 0.0
+
             # Output scalar parameters
             scalars = np.array([
                 float(gamma), float(ratio_bc), float(offset_spec),
-                float(alpha_dT), float(beta_dT), float(offset_dT)
+                float(alpha_dT), float(beta_dT), float(offset_dT),
+                float(spec_integral)
             ])
 
     return -0.5 * chi2, scalars
@@ -1332,9 +1358,9 @@ def model_log_likelihood_Cs(params, data_wavelength, data_flux, data_flux_dT, no
     lp = log_prior(params)
     if not np.isfinite(lp):
         if args.use_scalar_prior:
-            return -np.inf, np.zeros(7)
+            return -np.inf, np.zeros(8)
         else:
-            return -np.inf, np.zeros(6)
+            return -np.inf, np.zeros(7)
 
     try:
         use_center_offset = isinstance(args.fit_peakcenter_offset, float)
@@ -1401,9 +1427,9 @@ def model_log_likelihood_Cs(params, data_wavelength, data_flux, data_flux_dT, no
     except Exception as e:
         print(f"Error for params {params}: {e}")
         if args.use_scalar_prior:
-            return -np.inf, np.zeros(7)
+            return -np.inf, np.zeros(8)
         else:
-            return -np.inf, np.zeros(6)
+            return -np.inf, np.zeros(7)
 
 def compute_loglikelihood_C2v(
     model_flux, model_flux_dT, data_flux, data_flux_dT, noise_std, noise_std_dT):
@@ -1415,6 +1441,7 @@ def compute_loglikelihood_C2v(
     gamma = offset = 0
     alpha_dT = beta_dT = offset_dT = 0
     ratio_bc = np.nan
+    spec_integral = 0.0
 
     if args.fit_spec:
         # Apply Gaussian filter and crop edges
@@ -1431,6 +1458,11 @@ def compute_loglikelihood_C2v(
         fit = gamma * spec + offset
         chi = (measurement - fit) / noise
         chi2 += np.sum(chi ** 2)
+        try:
+            spec_integral = float(np.trapz(spec, data_wavelength[c:-c]))
+        except Exception as _e:
+            print(f"Warning: direct profile integral failed: {_e}")
+            spec_integral = 0.0
 
     if args.fit_dT:
         # Apply Gaussian filter and crop edges
@@ -1468,7 +1500,8 @@ def compute_loglikelihood_C2v(
     # Output scalar parameters
     scalars = np.array([
         float(gamma), float(ratio_bc), float(offset),
-        float(alpha_dT), float(beta_dT), float(offset_dT)
+        float(alpha_dT), float(beta_dT), float(offset_dT),
+        float(spec_integral)
     ])
 
     return -0.5 * chi2, scalars
@@ -1477,9 +1510,9 @@ def model_log_likelihood_C2v(params, data_wavelength, data_flux, data_flux_dT, n
     lp = log_prior(params)
     if not np.isfinite(lp):
         if args.use_scalar_prior:
-            return -np.inf, np.zeros(7)
+            return -np.inf, np.zeros(8)
         else:
-            return -np.inf, np.zeros(6)
+            return -np.inf, np.zeros(7)
 
     try:
         use_center_offset = isinstance(args.fit_peakcenter_offset, float)
@@ -1536,9 +1569,9 @@ def model_log_likelihood_C2v(params, data_wavelength, data_flux, data_flux_dT, n
     except Exception as e:
         print(f"Error for params {params}: {e}")
         if args.use_scalar_prior:
-            return -np.inf, np.zeros(7)
+            return -np.inf, np.zeros(8)
         else:
-            return -np.inf, np.zeros(6)
+            return -np.inf, np.zeros(7)
 
 # Clear TEMP_DIR on start
 for file in Path(TEMP_DIR).iterdir():

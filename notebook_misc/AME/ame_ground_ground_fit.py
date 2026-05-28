@@ -153,11 +153,11 @@ def _run_pgopher(T, A, B, C, axis, temp_dir):
   -v temp="{T}" \\
   -v A_val="{A}" -v B_val="{B}" -v C_val="{C}" \\
   -v axis="{axis}" '
-/<Parameter Name="Temperature" Value=/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\\\"" temp "\\\\"") }}
-/<Parameter Name="A" Value=/           {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\\\"" A_val "\\\\"") }}
-/<Parameter Name="B" Value=/           {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\\\"" B_val "\\\\"") }}
-/<Parameter Name="C" Value=/           {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\\\"" C_val "\\\\"") }}
-/<CartesianTransitionMoment Axis=/     {{ sub(/Axis="[^"]+"/, "Axis=\\\\"" axis "\\\\"") }}
+/<Parameter Name="Temperature" Value=/ {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" temp "\\"") }}
+/<Parameter Name="A" Value=/           {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" A_val "\\"") }}
+/<Parameter Name="B" Value=/           {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" B_val "\\"") }}
+/<Parameter Name="C" Value=/           {{ sub(/Value="[0-9.eE+-]+"/, "Value=\\"" C_val "\\"") }}
+/<CartesianTransitionMoment Axis=/     {{ sub(/Axis="[^"]+"/, "Axis=\\"" axis "\\"") }}
 {{ print }}
 ' {PGO_TEMPLATE} > {pgo_file}"""
 

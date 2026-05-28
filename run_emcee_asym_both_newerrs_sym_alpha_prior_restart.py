@@ -128,6 +128,13 @@ def parse_args():
                              "If False, asymmetric two-sided gaussian: width alpha_prior below 1, "
                              "width alpha_prior/2 above 1, continuous at 1 (default: True)")
 
+    parser.add_argument("-delta_prior", "--delta_prior",
+                        type=lambda x: x.lower() in ['true', '1', 'yes'],
+                        default=False,
+                        help="If True, apply inertia-defect prior penalising non-planar geometry. "
+                             "Computes dIc = (Ic - Ia - Ib)/Ic; flat (logp=0) for dIc<=0, "
+                             "Gaussian with sigma=0.05 for dIc>0. (default: False)")
+
     parser.add_argument("-old_errs", "--old_errs",
                         type=lambda x: x.lower() in ['true', '1', 'yes'],
                         default=False,
@@ -262,9 +269,9 @@ def list_to_str(v):
         return 'None'
     return '[' + ','.join(val_to_str(x) for x in v) + ']'
 
-TEMP_SUFFIX = f"DIB{args.dib}_Symmetry{val_to_str(args.symmetry_group)}_BC{val_to_str(args.B_not_equal_C)}_F{val_to_str(args.fudge)}_D{val_to_str(args.use_direct)}_" + \
+TEMP_SUFFIX = f"DIB{args.dib}_Sym{val_to_str(args.symmetry_group)}_BC{val_to_str(args.B_not_equal_C)}_F{val_to_str(args.fudge)}_D{val_to_str(args.use_direct)}_" + \
               f"Flat{val_to_str(args.flat_prior)}_Spec{val_to_str(args.fit_spec)}_dT{val_to_str(args.fit_dT)}_cov{val_to_str(args.cov)}_nonlin{val_to_str(args.nonlinear_fit)}" + \
-              f'_tauSlope{val_to_str(args.tau_prior)}_alphaSlope{val_to_str(args.alpha_prior)}_alphaCutoff{val_to_str(args.alpha_prior_cutoff)}_err{errType}_trunc{args.extra_truncation}_balanceErr{args.balance_errs}_dTcenter{list_to_str(args.emphasize_dT_center)}_centeroffset{val_to_str(args.fit_peakcenter_offset)}_{args.title}'
+              f'_tauSlope{val_to_str(args.tau_prior)}_alphaSlope{val_to_str(args.alpha_prior)}_alphaCut{val_to_str(args.alpha_prior_cutoff)}_err{errType}_trunc{args.extra_truncation}_balanceErr{args.balance_errs}_dTcent{list_to_str(args.emphasize_dT_center)}_wavoffset{val_to_str(args.fit_peakcenter_offset)}_dP{val_to_str(args.delta_prior)}_{args.title}'
 
 # DIB-specific constants (set after parsing args)
 if args.dib == '15272':
@@ -565,7 +572,7 @@ def _unpack_Cs_params(params):
         frac_B = frac_C
     return T, A, B, C, frac_A, frac_B, frac_C, lorentz_width, center_offset
 
-def _alpha_logprior(frac, center, sigma, cutoff):
+def _alpha_logprior(frac, center, sigma, cutoff, fac = 2):
     """Prior on a vibrational-stretch alpha coefficient.
 
     cutoff=True : hard wall at frac=1, half-gaussian of width sigma below.
@@ -575,6 +582,7 @@ def _alpha_logprior(frac, center, sigma, cutoff):
                   for the 15672 priors); continuity at frac=1 is enforced by
                   offsetting the right arm to match the left arm's value there.
     """
+    sigma = sigma/1.5 #little workaround to not destroy my queue
     if cutoff:
         if frac > 1:
             return -np.inf
@@ -583,7 +591,29 @@ def _alpha_logprior(frac, center, sigma, cutoff):
         if frac <= 1:
             return -(frac - center)**2 / (2 * sigma**2)
         val_at_boundary = -(1 - center)**2 / (2 * sigma**2)
-        return -(frac - 1)**2 / (2 * (sigma / 2)**2) + val_at_boundary
+        return -(frac - 1)**2 / (2 * (sigma / fac)**2) + val_at_boundary
+
+def _delta_logprior(A, B, C, sym, sigma=0.05):
+    """Inertia-defect prior for (near-)planar molecules.
+
+    For a planar molecule Ic = Ia + Ib, so delta = Ic - Ia - Ib = 0.
+    dIc = delta / Ic is zero for planar and positive for non-planar defects.
+    Prior is flat (logp=0) for dIc <= 0; Gaussian with width sigma for dIc > 0.
+
+    Cs  convention (A > B > C): A largest RC → Ia = 1/A smallest moment;
+                                 C smallest RC → Ic = 1/C largest moment.
+    C2v convention (C > B > A): C largest RC → Ia = 1/C smallest moment;
+                                 A smallest RC → Ic = 1/A largest moment.
+    """
+    if sym == 'Cs':
+        Ia, Ib, Ic = 1.0/A, 1.0/B, 1.0/C
+    else:  # C2v: C > B > A, so moment ordering is inverted relative to RC ordering
+        Ia, Ib, Ic = 1.0/C, 1.0/B, 1.0/A
+    delta = Ic - Ia - Ib
+    dIc   = delta / Ic
+    if dIc <= 0.0:
+        return 0.0
+    return -(dIc / sigma)**2
 
 def log_prior_Cs_15272(params):
     unpacked = _unpack_Cs_params(params)
@@ -639,6 +669,8 @@ def log_prior_Cs_15272(params):
     if use_center_offset:
         if abs(center_offset) > 1: return -np.inf
         lp += -center_offset**2/(2*args.fit_peakcenter_offset**2)
+    if args.delta_prior:
+        lp += _delta_logprior(A, B, C, 'Cs')
     return lp
 
 def log_prior_Cs_15672(params):
@@ -694,6 +726,8 @@ def log_prior_Cs_15672(params):
     if use_center_offset:
         if abs(center_offset) > 1: return -np.inf
         lp += -(center_offset - 0.1)**2/(2*args.fit_peakcenter_offset**2)
+    if args.delta_prior:
+        lp += _delta_logprior(A, B, C, 'Cs')
     return lp
 
 def log_prior_C2v_15272(params):
@@ -764,12 +798,13 @@ def log_prior_C2v_15272(params):
         frac_c_logprior = _alpha_logprior(frac_C, 1, alpha_sig, cutoff)
         if frac_c_logprior == -np.inf: return -np.inf
 
+        lp = temp_logprior + C_logprior + B_logprior + A_logprior + frac_a_logprior + frac_b_logprior + frac_c_logprior + lorentz_width_prior
         if use_center_offset:
             if abs(center_offset) > 1: return -np.inf
-            log_center_offset_prior = -center_offset**2/(2*args.fit_peakcenter_offset**2)
-            return temp_logprior + C_logprior + B_logprior +A_logprior + frac_a_logprior + frac_b_logprior + frac_c_logprior + lorentz_width_prior + log_center_offset_prior
-        else:
-            return temp_logprior + C_logprior + B_logprior + A_logprior + frac_a_logprior + frac_b_logprior + frac_c_logprior + lorentz_width_prior
+            lp += -center_offset**2/(2*args.fit_peakcenter_offset**2)
+        if args.delta_prior:
+            lp += _delta_logprior(A, B, C, 'C2v')
+        return lp
 
 def log_prior_C2v_15672(params):
     use_center_offset = isinstance(args.fit_peakcenter_offset, float)
@@ -841,12 +876,13 @@ def log_prior_C2v_15672(params):
         frac_c_logprior = _alpha_logprior(frac_C, 0.99, alpha_sig, cutoff)
         if frac_c_logprior == -np.inf: return -np.inf
 
+        lp = temp_logprior + A_logprior + B_logprior + C_logprior + frac_a_logprior + frac_b_logprior + frac_c_logprior + lorentz_width_prior
         if use_center_offset:
             if abs(center_offset) > 1: return -np.inf
-            log_center_offset_prior = -(center_offset-0.1)**2/(2*args.fit_peakcenter_offset**2)
-            return temp_logprior + A_logprior + B_logprior + C_logprior + frac_a_logprior + frac_b_logprior + frac_c_logprior + lorentz_width_prior + log_center_offset_prior
-        else:
-            return temp_logprior + A_logprior + B_logprior + C_logprior + frac_a_logprior + frac_b_logprior + frac_c_logprior + lorentz_width_prior
+            lp += -(center_offset-0.1)**2/(2*args.fit_peakcenter_offset**2)
+        if args.delta_prior:
+            lp += _delta_logprior(A, B, C, 'C2v')
+        return lp
 
 if args.symmetry_group == 'Cs':
     if args.dib == '15272':

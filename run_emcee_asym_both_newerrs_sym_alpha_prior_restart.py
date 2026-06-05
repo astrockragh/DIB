@@ -921,6 +921,37 @@ if args.restart_file is not None:
     print(f"  source chain shape: {_rdr.get_chain().shape}  "
           f"(last-state walkers: {_restart_last_positions.shape[0]})")
 
+    # ── Auto-detect cross-symmetry restart and remap A/C ordering ─────────────
+    _fname = os.path.basename(args.restart_file)
+    if   'SymmetryCs'  in _fname or 'SymCs'  in _fname:  _src_sym = 'Cs'
+    elif 'SymmetryC2v' in _fname or 'SymC2v' in _fname:  _src_sym = 'C2v'
+    else:
+        _src_sym = None
+        print(f"  Warning: cannot infer symmetry from filename — "
+              f"assuming same as current ({args.symmetry_group}), no remapping done")
+
+    _cross_sym_swapped = False
+    if _src_sym is not None and _src_sym != args.symmetry_group:
+        # In Cs  the hierarchy is A > B > C  (A largest, idx 1; C smallest, idx 3).
+        # In C2v the hierarchy is C > B > A  (C largest, idx 3; A smallest, idx 1).
+        # Converting between the two is a symmetric swap: A↔C and frac_A↔frac_C.
+        print(f"  Cross-symmetry restart detected: {_src_sym} → {args.symmetry_group}")
+        _p = _restart_last_positions.copy()
+        if args.B_not_equal_C:
+            # Full param vector: [T, A, B, C, frac_A, frac_B, frac_C, tau, (offset)]
+            _p[:, [1, 3]] = _p[:, [3, 1]]   # A ↔ C
+            _p[:, [4, 6]] = _p[:, [6, 4]]   # frac_A ↔ frac_C
+        else:
+            # Reduced vector: [T, A, C, frac_A, frac_C, tau, (offset)]  (B tied)
+            _p[:, [1, 2]] = _p[:, [2, 1]]   # A ↔ C
+            _p[:, [3, 4]] = _p[:, [4, 3]]   # frac_A ↔ frac_C
+        _restart_last_positions = _p
+        _cross_sym_swapped = True
+        print(f"  Swapped A↔C (pos 1,3) and frac_A↔frac_C (pos 4,6) across "
+              f"{_restart_last_positions.shape[0]} walkers")
+    elif _src_sym is not None:
+        print(f"  Same symmetry ({_src_sym}) — no remapping needed")
+
     if args.tether_dims is not None:
         _src_chain = _rdr.get_chain()
         try:
@@ -930,6 +961,20 @@ if args.restart_file is not None:
             _src_burnin = _src_chain.shape[0] // 2
         _src_burnin = max(1, min(_src_burnin, _src_chain.shape[0] - 1))
         _flat = _src_chain[_src_burnin:].reshape(-1, _src_chain.shape[2])
+
+        # If walkers were remapped for a cross-symmetry restart, apply the same
+        # column swap to the flat chain before fitting the KDE, so that the KDE
+        # is trained in the target symmetry's coordinate system and walkers
+        # evaluated against it are not immediately driven to -inf density.
+        if _cross_sym_swapped:
+            _flat = _flat.copy()
+            if args.B_not_equal_C:
+                _flat[:, [1, 3]] = _flat[:, [3, 1]]
+                _flat[:, [4, 6]] = _flat[:, [6, 4]]
+            else:
+                _flat[:, [1, 2]] = _flat[:, [2, 1]]
+                _flat[:, [3, 4]] = _flat[:, [4, 3]]
+            print(f"  KDE training data also remapped to {args.symmetry_group} coordinate order")
 
         # Thin to at most kde_thin samples for fast per-step KDE evaluation
         _n_kde = min(args.kde_thin, len(_flat))
